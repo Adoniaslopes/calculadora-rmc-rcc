@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora RMC/RCC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Escritório premium: tinta azul-petróleo + latão; leitura de painel financeiro. Cabeçalho escuro, cartões claros, resultado com linha do tempo do contrato. */
+:root{
+  --ink:#0e1a2b; --ink2:#1b2d47; --brass:#b88a2e; --brass2:#e9cf8f;
+  --paper:#eef1f5; --card:#ffffff; --text:#152033; --muted:#5f6b7d; --line:#e1e6ee;
+  --blue:#2b5a96; --good:#13734d; --goodbg:#e6f4ee; --bad:#b4372b; --badbg:#fbeae8; --warn:#93600a; --warnbg:#fff4dc;
+  --display:'DM Serif Display',Georgia,'Times New Roman',serif;
+  --body:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --r:16px; color-scheme:light;
+  /* compatibilidade com o código existente */
+  --bg:var(--paper); --navy:var(--ink2); --navy2:var(--blue); --green:var(--good); --greenbg:var(--goodbg); --red:var(--bad); --redbg:var(--badbg); --amber:var(--warn); --amberbg:var(--warnbg);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--text);font:15px/1.55 var(--body);-webkit-font-smoothing:antialiased}
+h1,h2,h3{text-wrap:balance}
+header{position:relative;overflow:hidden;background:radial-gradient(120% 140% at 100% 0%,#24406a 0%,var(--ink) 55%);color:#fff;padding:26px 18px 54px}
+header:after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,transparent,var(--brass) 20%,var(--brass2) 50%,var(--brass) 80%,transparent)}
+header .wrap{max-width:980px;margin:0 auto;position:relative}
+header small{display:inline-flex;align-items:center;gap:8px;color:var(--brass2);letter-spacing:.14em;text-transform:uppercase;font-size:11px;font-weight:700}
+header small:before{content:"";width:18px;height:1px;background:var(--brass2)}
+header h1{font-family:var(--display);font-weight:400;font-size:clamp(28px,7vw,40px);line-height:1.08;margin:10px 0 10px;letter-spacing:-.01em}
+header h1 em{font-style:normal;color:var(--brass2)}
+header p{margin:0;color:#c9d3e2;font-size:14px;max-width:600px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.chips span{font-size:12px;font-weight:600;color:#e8edf5;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);padding:5px 10px;border-radius:999px}
+main{max-width:980px;margin:-34px auto 40px;padding:0 14px;position:relative}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px 18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(14,26,43,.04),0 8px 24px -16px rgba(14,26,43,.18)}
+.card h2{font-family:var(--display);font-weight:400;font-size:21px;margin:0 0 14px;color:var(--ink);display:flex;align-items:center;gap:10px}
+.card h2 .n{width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--brass2);font:700 13px var(--body);display:inline-grid;place-items:center;flex:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 16px}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;letter-spacing:.02em}
+input,select,textarea{width:100%;font:500 15px var(--body);color:var(--text);background:#f8f9fb;border:1px solid #d6dce6;border-radius:12px;padding:11px 12px;min-height:46px;transition:border-color .15s,box-shadow .15s,background .15s}
+input:focus,select:focus,textarea:focus{outline:none;background:#fff;border-color:var(--blue);box-shadow:0 0 0 4px rgba(43,90,150,.14)}
+textarea{min-height:80px;resize:vertical;font:13px/1.5 'JetBrains Mono',ui-monospace,monospace}
+.hint{font-size:12px;color:var(--muted);margin-top:5px}
+.hint b{color:var(--text)}
+details{margin-top:14px}
+details summary{cursor:pointer;font-weight:700;font-size:13.5px;color:var(--blue)}
+.btn{appearance:none;border:0;border-radius:12px;padding:14px 18px;font:700 15px var(--body);cursor:pointer;min-height:50px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .08s,filter .15s}
+.btn:focus-visible{outline:3px solid var(--brass2);outline-offset:2px}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,#23395a,var(--ink));color:#fff;width:100%;box-shadow:0 10px 20px -12px rgba(14,26,43,.8)}
+.btn.primary:after{content:"→";color:var(--brass2)}
+.btn.ghost{background:#eef2f8;color:var(--ink2)}
+.btn.green{background:linear-gradient(180deg,#c99a3b,var(--brass));color:#1b1406;box-shadow:0 10px 20px -12px rgba(184,138,46,.9)}
+.btn:hover{filter:brightness(1.05)}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.actions .btn{flex:1 1 200px}
+.err{background:var(--badbg);color:var(--bad);border-radius:12px;padding:11px 13px;font-size:13.5px;margin-top:12px;display:none}
+/* resultado: destaque */
+.hero{display:grid;gap:4px;padding:18px;border-radius:14px;background:radial-gradient(130% 160% at 0% 0%,#22406b 0%,var(--ink) 60%);color:#fff;margin-bottom:14px;position:relative;overflow:hidden}
+.hero .l{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass2);font-weight:700}
+.hero .v{font-family:var(--display);font-size:clamp(34px,10vw,48px);line-height:1.05;font-variant-numeric:tabular-nums}
+.hero .s{font-size:13px;color:#c9d3e2}
+.hero .tagline{display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:#1b1406;background:var(--brass2);padding:4px 10px;border-radius:999px;justify-self:start}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:14px;padding:12px 13px;background:#fbfcfd;position:relative}
+.kpi .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.kpi .v{font-size:20px;font-weight:800;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.kpi .s{font-size:12px;color:var(--muted)}
+.kpi.hl{background:var(--goodbg);border-color:#bfe2d1}.kpi.hl .v{color:var(--good)}
+.kpi.bad .v{color:var(--bad)}
+/* linha do tempo do contrato */
+.tl{margin:16px 0 4px;display:grid;gap:14px}
+.tl .row .h{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+.tl .row .h b{color:var(--ink)}
+.tl .bar{display:flex;height:30px;border-radius:9px;overflow:hidden;background:#eef1f5}
+.tl .bar span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;min-width:0}
+.tl .a{background:linear-gradient(180deg,#3a6db0,var(--blue))}
+.tl .i{background:linear-gradient(180deg,#d1493b,var(--bad))}
+.tl .p{background:repeating-linear-gradient(135deg,#dfe7f2 0 6px,#cbd8ea 6px 12px);color:var(--ink2)!important}
+.tl .marks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.compare{display:none}
+.avisos{margin-top:12px}
+.aviso{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:10px 12px;font-size:13px;margin-top:6px}
+/* tabelas */
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:14px;max-height:520px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:var(--ink);color:#e9eef6;font-weight:700;font-size:11px;letter-spacing:.03em;z-index:1}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:inherit}
+th:first-child{background:var(--ink);z-index:2}
+tbody tr{background:#fff}
+tbody tr.q{background:#fff7e6}
+tbody tr.i{background:#fdf0ee}
+tbody tr.p{background:#f4f7fb;color:#4b5d74}
+tbody tr.sep td{background:#e7edf6;color:var(--ink2);font-weight:700;text-align:left}
+td.sit{text-align:center}
+.tag{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700}
+.tag.a{background:#e7edf6;color:var(--ink2)}
+.tag.q{background:#fde7b5;color:#7a4d00}
+.tag.i{background:#f7d4cf;color:var(--bad)}
+.tag.p{background:#dce8f7;color:var(--blue)}
+tfoot td{font-weight:800;background:#eef2f7;position:sticky;bottom:0}
+tfoot td:first-child{background:#eef2f7;z-index:2}
+.texto{background:#f9fafc;border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:12px;padding:15px 16px;font:15px/1.7 Georgia,'Times New Roman',serif;text-align:justify;color:#1d2a3d}
+.method{font-size:13.5px;color:#2a3442;padding-left:20px}
+.method li{margin-bottom:7px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(30px);background:var(--ink);color:#fff;padding:11px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.25s;pointer-events:none;z-index:9;max-width:92vw;text-align:center;border:1px solid rgba(233,207,143,.4)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#resultado{display:none}
+footer{text-align:center;font-size:12px;color:var(--muted);padding:6px 16px 34px}
+footer b{color:var(--ink2)}
+/* envio do extrato */
+.drop{position:relative;display:grid;gap:4px;justify-items:center;border:1.5px dashed #b9c4d4;border-radius:14px;padding:24px 14px;text-align:center;background:linear-gradient(180deg,#fafbfd,#f3f6fa);cursor:pointer;transition:.15s;overflow:hidden}
+.drop:before{content:"";width:44px;height:44px;border-radius:12px;background:var(--ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e9cf8f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5M12 18v-6M9 15l3-3 3 3'/%3E%3C/svg%3E") center/24px no-repeat;margin-bottom:6px}
+.drop.on{border-color:var(--blue);background:#eef4fb}
+.drop b{color:var(--ink);font-size:15.5px}
+.drop .sub{font-size:12.5px;color:var(--muted);max-width:420px}
+.drop input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:2;min-height:0;border:0;padding:0}
+.alt{margin-top:10px;font-size:12.5px;color:var(--muted)}
+.alt input[type=file],.hisc input[type=file]{min-height:auto;padding:8px;font-size:13px;background:#fff}
+.hisc{margin-top:12px;border:1px solid var(--line);border-radius:14px;padding:13px;background:#fbfaf6;border-left:3px solid var(--brass)}
+.hisc b{color:var(--ink);font-size:14px}
+.hisc .sub{font-size:12.5px;color:var(--muted);margin:2px 0 8px}
+.status{font-size:13.5px;margin-top:12px;color:var(--muted);display:none}
+.status.on{display:block}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #c9d3e0;border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.contratos{display:grid;gap:10px;margin-top:12px}
+.ct{border:1px solid var(--line);border-radius:14px;padding:13px 14px;display:grid;gap:4px;background:#fff;border-left:4px solid var(--blue)}
+.ct.off{opacity:.45;border-left-color:#c7cfdb}
+.ct .top{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.ct .t{font-weight:800;color:var(--ink)}
+.ct .m{font-size:12.5px;color:var(--muted)}
+.ctgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px 10px;margin-top:8px}
+.ctgrid input{min-height:42px;padding:8px 10px}
+#calcTodos{width:100%;margin-top:4px}
+.chk{display:flex;align-items:center;gap:9px;font-weight:800;color:var(--ink);margin:0;cursor:pointer}
+.chk input{width:20px;height:20px;min-height:0;accent-color:var(--ink)}
+.miss{outline:2px solid #f0b429!important;background:#fffaf0!important}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:16px 0 0;text-transform:uppercase;letter-spacing:.08em}
+.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.subt{font-size:14px;color:var(--ink);margin:18px 0 8px;display:flex;flex-direction:column;gap:2px}
+.subt span{font-size:12px;color:var(--muted);font-weight:500}
+.subt:first-child{margin-top:0}
+.mini{width:100%;margin-top:8px;font-size:12.5px;background:#fff;border-radius:10px;overflow:hidden}
+.mini th{position:static;background:#e3eaf4;color:var(--ink2);font-size:11px}
+.mini th,.mini td{padding:6px 8px;white-space:normal}
+.mini th:first-child,.mini td:first-child{position:static;text-align:left}
+.mini td small{display:block;color:var(--muted);font-size:11px}
+.mini tr.tot td{font-weight:800;background:#eef4fb}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <small>Calculadora de cartão consignado</small>
+  <h1>Conversão do cartão <em>RMC/RCC</em><br>em empréstimo consignado</h1>
+  <p>Envie o extrato do INSS: a calculadora recalcula o cartão como consignado comum, à taxa média do Banco Central, mostra quando a dívida acaba e quanto foi descontado a mais.</p>
+  <div class="chips"><span>Taxa média BACEN</span><span>IPCA · Lei 14.905</span><span>Dobro após 03/2021</span><span>Memória em Word</span></div>
+</div></header>
+
+<main>
+<div class="card" id="upCard">
+  <h2><span class="n">1</span>Envie o extrato do INSS</h2>
+  <div class="drop" id="drop">
+    <input type="file" id="arq" accept=".pdf,application/pdf,image/*" aria-label="Enviar extrato">
+    <b>Toque aqui para enviar o extrato</b>
+    <div class="sub">PDF do Meu INSS ou foto/print legível. A plataforma lê os cartões RMC/RCC e preenche o cálculo.</div>
+  </div>
+  <div class="alt">Se o toque acima não abrir seus arquivos, use este botão:<br><input type="file" id="arq2" accept=".pdf,application/pdf,image/*"></div>
+  <details id="colarBox"><summary>Não abriu? Cole o texto do extrato</summary>
+    <div style="margin-top:10px">
+      <textarea id="colar" style="font-family:Inter,sans-serif;min-height:120px" placeholder="Abra o PDF do extrato, selecione todo o texto, copie e cole aqui."></textarea>
+      <button type="button" class="btn ghost" id="lerColado" style="margin-top:8px;width:100%">Ler texto colado</button>
+    </div>
+  </details>
+  <div class="hisc">
+    <b>Opcional: Histórico de Créditos (HISCRE)</b>
+    <div class="sub">Traz o valor descontado em cada mês. Com ele, o cálculo usa os descontos reais em vez de repetir a parcela atual.</div>
+    <input type="file" id="arqH" accept=".pdf,application/pdf,image/*">
+    <div class="status" id="hStatus"></div>
+  </div>
+  <div class="status" id="upStatus"></div>
+  <div class="contratos" id="contratos"></div>
+  <div class="or">ou preencha manualmente</div>
+</div>
+
+<form id="f" class="card" autocomplete="off">
+  <h2><span class="n">2</span>Contrato</h2>
+  <div class="aviso" id="modoNota" style="display:none;margin:-4px 0 12px;background:#eef4fb;color:#1f4f82"></div>
+  <div class="grid">
+    <div><label for="cliente">Cliente</label><input id="cliente" placeholder="Nome do(a) cliente"></div>
+    <div><label for="banco">Banco</label><input id="banco" placeholder="Ex.: Banco BMG S.A."></div>
+    <div><label for="numContrato">Nº do contrato</label><input id="numContrato" placeholder="Opcional"></div>
+    <div><label for="modalidade">Modalidade</label>
+      <select id="modalidade"><option value="RMC">RMC – Reserva de Margem Consignável</option><option value="RCC">RCC – Reserva de Cartão Consignado</option><option value="RMC/RCC">RMC + RCC (contratos somados)</option></select></div>
+    <div><label for="valor">Valor recebido (R$)</label><input id="valor" inputmode="decimal" placeholder="1.500,00" required>
+      <div class="hint" id="valorHint">O "saque" creditado na conta.</div></div>
+    <div><label for="contrato">Mês da contratação</label><input id="contrato" type="month" required></div>
+    <div><label for="pmt">Desconto mensal (R$)</label><input id="pmt" inputmode="decimal" placeholder="90,00" required></div>
+    <div><label for="primeiro">1º desconto no benefício</label><input id="primeiro" type="month" required></div>
+    <div><label for="ultimo">Último desconto considerado</label><input id="ultimo" type="month" required></div>
+    <div><label for="taxa">Taxa do consignado (% a.m.)</label><input id="taxa" inputmode="decimal" required>
+      <div class="hint" id="taxaHint">Preenchida pela série SGS 25468 do BACEN.</div></div>
+  </div>
+  <details>
+    <summary>Descontos com valor diferente (opcional)</summary>
+    <div style="margin-top:10px">
+      <textarea id="excecoes" placeholder="05/2020 = 0&#10;01/2023 = 95,40"></textarea>
+      <div class="hint">Uma linha por mês, no formato <b>MM/AAAA = valor</b>. Use 0 para meses sem desconto.</div>
+    </div>
+  </details>
+</form>
+
+<div class="card">
+  <h2><span class="n">3</span>Atualização e pedido</h2>
+  <div class="grid">
+    <div><label for="base">Data-base do cálculo</label><input id="base" type="month" required>
+      <div class="hint">Em regra, o mês do ajuizamento.</div></div>
+    <div><label for="regime">Correção e juros</label>
+      <select id="regime">
+        <option value="lei14905">Lei 14.905/24 – IPCA + juros (SELIC − IPCA)</option>
+        <option value="selic">SELIC única após o marco dos juros (IPCA antes)</option>
+        <option value="antigo">INPC + 1% a.m. até 08/2024; depois Lei 14.905</option>
+      </select></div>
+    <div><label for="jurosDesde">Marco dos juros de mora</label>
+      <select id="jurosDesde">
+        <option value="nenhum">Citação ainda não ocorreu (petição inicial)</option>
+        <option value="citacao">Citação em data conhecida</option>
+        <option value="desconto">Cada desconto (Súmula 54/STJ)</option>
+      </select></div>
+    <div id="citWrap" style="display:none"><label for="citacao">Mês da citação</label><input id="citacao" type="month"></div>
+    <div><label for="dobro">Repetição do indébito</label>
+      <select id="dobro">
+        <option value="modulado">Simples até 30/03/2021 e em dobro a partir de abr/2021 (EAREsp 676.608)</option>
+        <option value="integral">Em dobro integral (má-fé reconhecida)</option>
+        <option value="simples">Simples integral</option>
+      </select></div>
+    <div><label for="dano">Danos morais pleiteados (R$)</label><input id="dano" inputmode="decimal" value="10.000,00">
+      <div class="hint">Somado só no valor da causa. Tribunais costumam fixar entre R$ 3 mil e R$ 10 mil.</div></div>
+  </div>
+  <div class="err" id="err"></div>
+  <div style="margin-top:16px"><button class="btn primary" id="calc" type="button">Calcular</button></div>
+</div>
+
+<section id="resultado">
+  <div class="card">
+    <h2><span class="n">4</span>Resultado</h2>
+    <div id="hero"></div>
+    <div class="tl" id="tl"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="compare" id="compare"></div>
+    <div class="avisos" id="avisos"></div>
+  </div>
+
+  <div class="card">
+    <h2>Texto para a petição</h2>
+    <div class="texto" id="texto"></div>
+    <div class="actions" style="margin-top:12px">
+      <button class="btn green" id="btnDocx" type="button">Baixar memória em Word</button>
+      <button class="btn ghost" id="copiar" type="button">Copiar texto</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Memória de cálculo mês a mês</h2>
+    <div id="tabs"></div>
+  </div>
+
+  <div class="card">
+    <h2>Metodologia</h2>
+    <ol class="method" id="metodo"></ol>
+  </div>
+</section>
+<footer><b>Versão 07/11/2026 · 12h55</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const D = {"T":{"1103":2.31,"1104":2.33,"1105":2.35,"1106":2.34,"1107":2.33,"1108":2.33,"1109":2.33,"1110":2.32,"1111":2.3,"1112":2.25,"1201":2.28,"1202":2.29,"1203":2.29,"1204":2.2,"1205":2.12,"1206":2.03,"1207":2.02,"1208":2.01,"1209":2.03,"1210":2.0,"1211":1.99,"1212":1.99,"1301":2.02,"1302":2.02,"1303":2.0,"1304":1.99,"1305":1.99,"1306":1.99,"1307":2.0,"1308":2.01,"1309":2.03,"1310":2.03,"1311":2.03,"1312":2.03,"1401":2.04,"1402":2.07,"1403":2.06,"1404":2.06,"1405":2.07,"1406":2.07,"1407":2.07,"1408":2.07,"1409":2.07,"1410":2.07,"1411":2.07,"1412":2.08,"1501":2.1,"1502":2.12,"1503":2.11,"1504":2.11,"1505":2.1,"1506":2.08,"1507":2.08,"1508":2.09,"1509":2.09,"1510":2.1,"1511":2.21,"1512":2.27,"1601":2.3,"1602":2.31,"1603":2.29,"1604":2.27,"1605":2.25,"1606":2.23,"1607":2.22,"1608":2.23,"1609":2.23,"1610":2.23,"1611":2.24,"1612":2.23,"1701":2.26,"1702":2.26,"1703":2.24,"1704":2.1,"1705":2.07,"1706":2.06,"1707":2.06,"1708":2.05,"1709":2.04,"1710":2.03,"1711":2.0,"1712":2.0,"1801":2.0,"1802":2.01,"1803":2.0,"1804":1.98,"1805":1.96,"1806":1.93,"1807":1.91,"1808":1.9,"1809":1.89,"1810":1.88,"1811":1.88,"1812":1.9,"1901":1.9,"1902":1.9,"1903":1.88,"1904":1.85,"1905":1.84,"1906":1.81,"1907":1.8,"1908":1.78,"1909":1.76,"1910":1.73,"1911":1.72,"1912":1.69,"2001":1.76,"2002":1.78,"2003":1.72,"2004":1.64,"2005":1.63,"2006":1.62,"2007":1.56,"2008":1.56,"2009":1.55,"2010":1.65,"2011":1.63,"2012":1.6,"2101":1.63,"2102":1.62,"2103":1.62,"2104":1.66,"2105":1.61,"2106":1.6,"2107":1.57,"2108":1.56,"2109":1.56,"2110":1.57,"2111":1.62,"2112":1.73,"2201":1.91,"2202":1.87,"2203":1.96,"2204":2.01,"2205":1.99,"2206":1.97,"2207":1.96,"2208":1.98,"2209":2.0,"2210":2.01,"2211":2.01,"2212":2.02,"2301":2.06,"2302":2.04,"2303":1.97,"2304":1.91,"2305":1.9,"2306":1.88,"2307":1.86,"2308":1.81,"2309":1.84,"2310":1.83,"2311":1.82,"2312":1.78,"2401":1.78,"2402":1.73,"2403":1.7,"2404":1.68,"2405":1.65,"2406":1.63,"2407":1.63,"2408":1.64,"2409":1.64,"2410":1.64,"2411":1.65,"2412":1.66,"2501":1.75,"2502":1.78,"2503":1.8,"2504":1.81,"2505":1.83,"2506":1.83,"2507":1.82,"2508":1.81,"2509":1.81,"2510":1.8,"2511":1.8,"2512":1.8,"2601":1.81,"2602":1.82,"2603":1.81,"2604":1.8,"2605":1.82,"2606":1.83,"2607":1.82,"2608":1.82,"2609":1.76},"IPCA":{"1001":0.75,"1002":0.78,"1003":0.52,"1004":0.57,"1005":0.43,"1006":0.0,"1007":0.01,"1008":0.04,"1009":0.45,"1010":0.75,"1011":0.83,"1012":0.63,"1101":0.83,"1102":0.8,"1103":0.79,"1104":0.77,"1105":0.47,"1106":0.15,"1107":0.16,"1108":0.37,"1109":0.53,"1110":0.43,"1111":0.52,"1112":0.5,"1201":0.56,"1202":0.45,"1203":0.21,"1204":0.64,"1205":0.36,"1206":0.08,"1207":0.43,"1208":0.41,"1209":0.57,"1210":0.59,"1211":0.6,"1212":0.79,"1301":0.86,"1302":0.6,"1303":0.47,"1304":0.55,"1305":0.37,"1306":0.26,"1307":0.03,"1308":0.24,"1309":0.35,"1310":0.57,"1311":0.54,"1312":0.92,"1401":0.55,"1402":0.69,"1403":0.92,"1404":0.67,"1405":0.46,"1406":0.4,"1407":0.01,"1408":0.25,"1409":0.57,"1410":0.42,"1411":0.51,"1412":0.78,"1501":1.24,"1502":1.22,"1503":1.32,"1504":0.71,"1505":0.74,"1506":0.79,"1507":0.62,"1508":0.22,"1509":0.54,"1510":0.82,"1511":1.01,"1512":0.96,"1601":1.27,"1602":0.9,"1603":0.43,"1604":0.61,"1605":0.78,"1606":0.35,"1607":0.52,"1608":0.44,"1609":0.08,"1610":0.26,"1611":0.18,"1612":0.3,"1701":0.38,"1702":0.33,"1703":0.25,"1704":0.14,"1705":0.31,"1706":-0.23,"1707":0.24,"1708":0.19,"1709":0.16,"1710":0.42,"1711":0.28,"1712":0.44,"1801":0.29,"1802":0.32,"1803":0.09,"1804":0.22,"1805":0.4,"1806":1.26,"1807":0.33,"1808":-0.09,"1809":0.48,"1810":0.45,"1811":-0.21,"1812":0.15,"1901":0.32,"1902":0.43,"1903":0.75,"1904":0.57,"1905":0.13,"1906":0.01,"1907":0.19,"1908":0.11,"1909":-0.04,"1910":0.1,"1911":0.51,"1912":1.15,"2001":0.21,"2002":0.25,"2003":0.07,"2004":-0.31,"2005":-0.38,"2006":0.26,"2007":0.36,"2008":0.24,"2009":0.64,"2010":0.86,"2011":0.89,"2012":1.35,"2101":0.25,"2102":0.86,"2103":0.93,"2104":0.31,"2105":0.83,"2106":0.53,"2107":0.96,"2108":0.87,"2109":1.16,"2110":1.25,"2111":0.95,"2112":0.73,"2201":0.54,"2202":1.01,"2203":1.62,"2204":1.06,"2205":0.47,"2206":0.67,"2207":-0.68,"2208":-0.36,"2209":-0.29,"2210":0.59,"2211":0.41,"2212":0.62,"2301":0.53,"2302":0.84,"2303":0.71,"2304":0.61,"2305":0.23,"2306":-0.08,"2307":0.12,"2308":0.23,"2309":0.26,"2310":0.24,"2311":0.28,"2312":0.56,"2401":0.42,"2402":0.83,"2403":0.16,"2404":0.38,"2405":0.46,"2406":0.21,"2407":0.38,"2408":-0.02,"2409":0.44,"2410":0.56,"2411":0.39,"2412":0.52,"2501":0.16,"2502":1.31,"2503":0.56,"2504":0.43,"2505":0.26,"2506":0.24,"2507":0.26,"2508":-0.11,"2509":0.48,"2510":0.09,"2511":0.18,"2512":0.33,"2601":0.33,"2602":0.7,"2603":0.88,"2604":0.67,"2605":0.58,"2606":0.16,"2607":0.07,"2608":-0.32,"2609":0.82},"INPC":{"1001":0.88,"1002":0.7,"1003":0.71,"1004":0.73,"1005":0.43,"1006":-0.11,"1007":-0.07,"1008":-0.07,"1009":0.54,"1010":0.92,"1011":1.03,"1012":0.6,"1101":0.94,"1102":0.54,"1103":0.66,"1104":0.72,"1105":0.57,"1106":0.22,"1107":0.0,"1108":0.42,"1109":0.45,"1110":0.32,"1111":0.57,"1112":0.51,"1201":0.51,"1202":0.39,"1203":0.18,"1204":0.64,"1205":0.55,"1206":0.26,"1207":0.43,"1208":0.45,"1209":0.63,"1210":0.71,"1211":0.54,"1212":0.74,"1301":0.92,"1302":0.52,"1303":0.6,"1304":0.59,"1305":0.35,"1306":0.28,"1307":-0.13,"1308":0.16,"1309":0.27,"1310":0.61,"1311":0.54,"1312":0.72,"1401":0.63,"1402":0.64,"1403":0.82,"1404":0.78,"1405":0.6,"1406":0.26,"1407":0.13,"1408":0.18,"1409":0.49,"1410":0.38,"1411":0.53,"1412":0.62,"1501":1.48,"1502":1.16,"1503":1.51,"1504":0.71,"1505":0.99,"1506":0.77,"1507":0.58,"1508":0.25,"1509":0.51,"1510":0.77,"1511":1.11,"1512":0.9,"1601":1.51,"1602":0.95,"1603":0.44,"1604":0.64,"1605":0.98,"1606":0.47,"1607":0.64,"1608":0.31,"1609":0.08,"1610":0.17,"1611":0.07,"1612":0.14,"1701":0.42,"1702":0.24,"1703":0.32,"1704":0.08,"1705":0.36,"1706":-0.3,"1707":0.17,"1708":-0.03,"1709":-0.02,"1710":0.37,"1711":0.18,"1712":0.26,"1801":0.23,"1802":0.18,"1803":0.07,"1804":0.21,"1805":0.43,"1806":1.43,"1807":0.25,"1808":0.0,"1809":0.3,"1810":0.4,"1811":-0.25,"1812":0.14,"1901":0.36,"1902":0.54,"1903":0.77,"1904":0.6,"1905":0.15,"1906":0.01,"1907":0.1,"1908":0.12,"1909":-0.05,"1910":0.04,"1911":0.54,"1912":1.22,"2001":0.19,"2002":0.17,"2003":0.18,"2004":-0.23,"2005":-0.25,"2006":0.3,"2007":0.44,"2008":0.36,"2009":0.87,"2010":0.89,"2011":0.95,"2012":1.46,"2101":0.27,"2102":0.82,"2103":0.86,"2104":0.38,"2105":0.96,"2106":0.6,"2107":1.02,"2108":0.88,"2109":1.2,"2110":1.16,"2111":0.84,"2112":0.73,"2201":0.67,"2202":1.0,"2203":1.71,"2204":1.04,"2205":0.45,"2206":0.62,"2207":-0.6,"2208":-0.31,"2209":-0.32,"2210":0.47,"2211":0.38,"2212":0.69,"2301":0.46,"2302":0.77,"2303":0.64,"2304":0.53,"2305":0.36,"2306":-0.1,"2307":-0.09,"2308":0.2,"2309":0.11,"2310":0.12,"2311":0.1,"2312":0.55,"2401":0.57,"2402":0.81,"2403":0.19,"2404":0.37,"2405":0.46,"2406":0.25,"2407":0.26,"2408":-0.14,"2409":0.48,"2410":0.61,"2411":0.33,"2412":0.48,"2501":0.0,"2502":1.48,"2503":0.51,"2504":0.48,"2505":0.35,"2506":0.23,"2507":0.21,"2508":-0.21,"2509":0.52,"2510":0.03,"2511":0.03,"2512":0.21,"2601":0.39,"2602":0.56,"2603":0.91,"2604":0.81,"2605":0.65,"2606":0.14,"2607":-0.01,"2608":-0.32,"2609":0.82},"SELIC":{"1001":0.66,"1002":0.59,"1003":0.76,"1004":0.67,"1005":0.75,"1006":0.79,"1007":0.86,"1008":0.89,"1009":0.85,"1010":0.81,"1011":0.81,"1012":0.93,"1101":0.86,"1102":0.84,"1103":0.92,"1104":0.84,"1105":0.99,"1106":0.96,"1107":0.97,"1108":1.07,"1109":0.94,"1110":0.88,"1111":0.86,"1112":0.91,"1201":0.89,"1202":0.75,"1203":0.82,"1204":0.71,"1205":0.74,"1206":0.64,"1207":0.68,"1208":0.69,"1209":0.54,"1210":0.61,"1211":0.55,"1212":0.55,"1301":0.6,"1302":0.49,"1303":0.55,"1304":0.61,"1305":0.6,"1306":0.61,"1307":0.72,"1308":0.71,"1309":0.71,"1310":0.81,"1311":0.72,"1312":0.79,"1401":0.85,"1402":0.79,"1403":0.77,"1404":0.82,"1405":0.87,"1406":0.82,"1407":0.95,"1408":0.87,"1409":0.91,"1410":0.95,"1411":0.84,"1412":0.96,"1501":0.94,"1502":0.82,"1503":1.04,"1504":0.95,"1505":0.99,"1506":1.07,"1507":1.18,"1508":1.11,"1509":1.11,"1510":1.11,"1511":1.06,"1512":1.16,"1601":1.06,"1602":1.0,"1603":1.16,"1604":1.06,"1605":1.11,"1606":1.16,"1607":1.11,"1608":1.22,"1609":1.11,"1610":1.05,"1611":1.04,"1612":1.12,"1701":1.09,"1702":0.87,"1703":1.05,"1704":0.79,"1705":0.93,"1706":0.81,"1707":0.8,"1708":0.8,"1709":0.64,"1710":0.64,"1711":0.57,"1712":0.54,"1801":0.58,"1802":0.47,"1803":0.53,"1804":0.52,"1805":0.52,"1806":0.52,"1807":0.54,"1808":0.57,"1809":0.47,"1810":0.54,"1811":0.49,"1812":0.49,"1901":0.54,"1902":0.49,"1903":0.47,"1904":0.52,"1905":0.54,"1906":0.47,"1907":0.57,"1908":0.5,"1909":0.46,"1910":0.48,"1911":0.38,"1912":0.37,"2001":0.38,"2002":0.29,"2003":0.34,"2004":0.28,"2005":0.24,"2006":0.21,"2007":0.19,"2008":0.16,"2009":0.16,"2010":0.16,"2011":0.15,"2012":0.16,"2101":0.15,"2102":0.13,"2103":0.2,"2104":0.21,"2105":0.27,"2106":0.31,"2107":0.36,"2108":0.43,"2109":0.44,"2110":0.49,"2111":0.59,"2112":0.77,"2201":0.73,"2202":0.76,"2203":0.93,"2204":0.83,"2205":1.03,"2206":1.02,"2207":1.03,"2208":1.17,"2209":1.07,"2210":1.02,"2211":1.02,"2212":1.12,"2301":1.12,"2302":0.92,"2303":1.17,"2304":0.92,"2305":1.12,"2306":1.07,"2307":1.07,"2308":1.14,"2309":0.97,"2310":1.0,"2311":0.92,"2312":0.89,"2401":0.97,"2402":0.8,"2403":0.83,"2404":0.89,"2405":0.83,"2406":0.79,"2407":0.91,"2408":0.87,"2409":0.84,"2410":0.93,"2411":0.79,"2412":0.93,"2501":1.01,"2502":0.99,"2503":0.96,"2504":1.06,"2505":1.14,"2506":1.1,"2507":1.28,"2508":1.16,"2509":1.22,"2510":1.28,"2511":1.05,"2512":1.22,"2601":1.16,"2602":1.0,"2603":1.21,"2604":1.09,"2605":1.07,"2606":1.12,"2607":1.22,"2608":1.09,"2609":1.08,"2610":1.07}};
+// ===== Motor de cálculo RMC/RCC → consignado =====
+const DOBRO_DESDE = 2021 * 12 + 3; // abril/2021 (cobranças após 30/03/2021 – EAREsp 676.608/STJ)
+const CORTE_14905 = 2024 * 12 + 7; // agosto/2024 (Lei 14.905 a partir de 30/08/2024)
+
+function ymToIdx(s) { const [y, m] = s.split('-').map(Number); return y * 12 + (m - 1); }
+function idxToKey(i) { const y = Math.floor(i / 12), m = (i % 12) + 1; return String(y).slice(2) + String(m).padStart(2, '0'); }
+function idxToLabel(i) { const y = Math.floor(i / 12), m = (i % 12) + 1; return String(m).padStart(2, '0') + '/' + y; }
+function serieGet(D, s, i) { const v = D[s][idxToKey(i)]; return v === undefined ? undefined : v; }
+function serieUltimo(D, s) { let best = -1; for (const k in D[s]) { const i = (2000 + +k.slice(0, 2)) * 12 + (+k.slice(2) - 1); if (i > best) best = i; } return best; }
+function serieInicio(D, s) { let best = 1e9; for (const k in D[s]) { const i = (2000 + +k.slice(0, 2)) * 12 + (+k.slice(2) - 1); if (i < best) best = i; } return best; }
+
+// produto (1+v) nos meses (a, b]
+function fatorAcum(D, s, a, b) { let f = 1; for (let k = a + 1; k <= b; k++) { const v = serieGet(D, s, k); if (v !== undefined) f *= 1 + v / 100; } return f; }
+// soma simples de max(0, selic-ipca) nos meses (a, b] em que ambos existem
+function jurosLegal(D, a, b) { let j = 0; for (let k = a + 1; k <= b; k++) { const s = serieGet(D, 'SELIC', k), p = serieGet(D, 'IPCA', k); if (s !== undefined && p !== undefined) j += Math.max(0, s - p) / 100; } return j; }
+function somaSelic(D, a, b) { let j = 0; for (let k = a + 1; k <= b; k++) { const s = serieGet(D, 'SELIC', k); if (s !== undefined) j += s / 100; } return j; }
+
+function taxaDoMes(D, idx) {
+  const v = serieGet(D, 'T', idx);
+  if (v !== undefined) return { taxa: v, exata: true, mes: idx };
+  const ini = serieInicio(D, 'T'), fim = serieUltimo(D, 'T');
+  const m = idx < ini ? ini : fim;
+  return { taxa: serieGet(D, 'T', m), exata: false, mes: m };
+}
+
+function calcular(inp, D) {
+  const i = inp.taxa / 100;
+  const ini = ymToIdx(inp.primeiro), fim = ymToIdx(inp.ultimo), B = ymToIdx(inp.base);
+  const Cfix = inp.jurosDesde === 'citacao' && inp.citacao ? ymToIdx(inp.citacao) : null;
+  const avisos = [];
+  if (fim < ini) throw new Error('O último desconto é anterior ao primeiro.');
+  if (inp.jurosDesde === 'nenhum') avisos.push('Sem juros de mora: eles só correm a partir da citação (art. 405 do CC), ainda não ocorrida.');
+
+  let saldo = inp.P, quit = null, rows = [];
+  let totDesc = 0, totInd = 0, totAtual = 0, totFinal = 0, totFinalSimples = 0, totFinalDobro = 0, nApos = 0;
+  for (let k = ini; k <= fim; k++) {
+    const pmt = inp.excecoes && inp.excecoes[k] !== undefined ? inp.excecoes[k] : inp.pmt;
+    totDesc += pmt;
+    const r = { idx: k, comp: idxToLabel(k), saldoIni: saldo, juros: 0, desconto: pmt, amort: 0, saldoFim: 0, indebito: 0 };
+    if (saldo > 0.005) {
+      r.juros = saldo * i;
+      const devido = saldo + r.juros;
+      if (pmt >= devido) { r.amort = saldo; r.indebito = pmt - devido; saldo = 0; quit = k; r.situacao = 'quitação'; }
+      else { r.amort = pmt - r.juros; saldo = saldo - r.amort; r.situacao = 'amortização'; }
+    } else { r.indebito = pmt; r.situacao = 'indébito'; if (pmt > 0) nApos++; }
+    r.saldoFim = saldo;
+
+    if (r.indebito > 0) {
+      let fc = 1, j = 0;
+      const C = inp.jurosDesde === 'desconto' ? k : Cfix;
+      if (inp.regime === 'lei14905') { fc = fatorAcum(D, 'IPCA', k, B); if (C !== null) j = jurosLegal(D, Math.max(k, C), B); }
+      else if (inp.regime === 'selic') {
+        if (C === null) fc = fatorAcum(D, 'IPCA', k, B);
+        else if (k >= C) { fc = 1; j = somaSelic(D, k, B); }
+        else { fc = fatorAcum(D, 'IPCA', k, Math.min(C, B)); j = somaSelic(D, C, B); }
+      } else if (inp.regime === 'antigo') {
+        fc = fatorAcum(D, 'INPC', k, Math.min(B, CORTE_14905)) * fatorAcum(D, 'IPCA', Math.max(k, CORTE_14905), B);
+        if (C !== null) {
+          const a = Math.max(k, C);
+          const m1 = Math.max(0, Math.min(B, CORTE_14905) - a);
+          j = 0.01 * m1 + jurosLegal(D, Math.max(a, CORTE_14905), B);
+        }
+      }
+      const dobro = inp.dobro === 'integral' ? true : inp.dobro === 'simples' ? false : k >= DOBRO_DESDE;
+      r.fator = fc; r.jurosPct = j;
+      r.atualizado = r.indebito * fc * (1 + j);
+      r.dobro = dobro;
+      r.final = r.atualizado * (dobro ? 2 : 1);
+      totInd += r.indebito; totAtual += r.atualizado; totFinal += r.final;
+      if (dobro) totFinalDobro += r.final; else totFinalSimples += r.final;
+    }
+    rows.push(r);
+  }
+  // previsão de quitação para contrato ainda não quitado, mantidos taxa e desconto
+  let previsao = null;
+  if (quit === null && saldo > 0.005) {
+    const ultDesc = rows.length ? rows[rows.length - 1].desconto : 0;
+    const pmtProj = ultDesc > 0 ? ultDesc : inp.pmt; // projeta com o último desconto efetivo
+    if (pmtProj <= saldo * i) previsao = { nunca: true };
+    else {
+      let s = saldo, k = fim, total = 0; const proj = [];
+      while (s > 0.005 && proj.length < 600) {
+        k++; const j = s * i, devido = s + j, pago = Math.min(pmtProj, devido);
+        proj.push({ idx: k, comp: idxToLabel(k), saldoIni: s, juros: j, desconto: pago, amort: pago - j, saldoFim: devido - pago, situacao: 'a vencer' });
+        total += pago; s = devido - pago;
+      }
+      previsao = { mes: k, nRestantes: proj.length, ultimaParcela: proj[proj.length - 1].desconto, totalRestante: total, rows: proj };
+    }
+  }
+  const ultIPCA = serieUltimo(D, 'IPCA');
+  if (B > ultIPCA) avisos.push('Correção aplicada até ' + idxToLabel(ultIPCA) + ', último índice publicado pelo IBGE.');
+  return {
+    rows, quit, saldoAberto: saldo, previsao, totDesc, totInd, totAtual, totFinal, totFinalSimples, totFinalDobro,
+    nParcelas: rows.filter(x => x.desconto > 0).length, nAteQuit: quit === null ? null : rows.filter(x => x.idx <= quit && x.desconto > 0).length, nApos, avisos,
+    valorCausa: totFinal + (inp.danoMoral || 0)
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { calcular, taxaDoMes, ymToIdx, idxToLabel };
+
+
+// ===== utilidades de UI =====
+const $ = id => document.getElementById(id);
+const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const num = (v, d = 2) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const parseBR = s => { if (typeof s === 'number') return s; s = String(s || '').trim().replace(/[R$\s]/g, ''); if (!s) return NaN; if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); return parseFloat(s); };
+const idxToYM = i => Math.floor(i / 12) + '-' + String(i % 12 + 1).padStart(2, '0');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const lbl = ym => idxToLabel(ymToIdx(ym));
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 2600); }
+
+const hoje = new Date();
+const mesAtual = hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0');
+$('base').value = mesAtual; $('ultimo').value = mesAtual;
+$('ultimosIdx').textContent = 'IPCA/INPC ' + idxToLabel(serieUltimo(D, 'IPCA')) + ' · taxa consignado ' + idxToLabel(serieUltimo(D, 'T')) + ' · SELIC ' + idxToLabel(serieUltimo(D, 'SELIC'));
+
+let taxaManual = false;
+let fonteValor = 'manual'; // 'saque' | 'limite' | 'manual'
+$('taxa').addEventListener('input', () => taxaManual = true);
+$('valor').addEventListener('input', () => { fonteValor = 'manual'; $('valorHint').textContent = 'O "saque" creditado na conta.'; });
+$('contrato').addEventListener('change', () => {
+  const v = $('contrato').value; if (!v) return;
+  const idx = ymToIdx(v);
+  $('primeiro').value = idxToYM(idx + 1);
+  const t = taxaDoMes(D, idx);
+  if (!taxaManual) $('taxa').value = num(t.taxa);
+  $('taxaHint').innerHTML = t.exata
+    ? 'Taxa média BACEN (SGS 25468) de <b>' + idxToLabel(idx) + '</b>: <b>' + num(t.taxa) + '% a.m.</b>'
+    : 'Sem taxa publicada para ' + idxToLabel(idx) + '; usada a de <b>' + idxToLabel(t.mes) + '</b> (' + num(t.taxa) + '% a.m.). Ajuste se preciso.';
+});
+$('jurosDesde').addEventListener('change', () => { $('citWrap').style.display = $('jurosDesde').value === 'citacao' ? '' : 'none'; });
+
+function parseExcecoes(txt) {
+  const out = {}; const bad = [];
+  txt.split(/\n/).map(l => l.trim()).filter(Boolean).forEach(l => {
+    const m = l.match(/^(\d{1,2})\/(\d{4})\s*[=:;]\s*([\d.,]+)$/);
+    if (!m) { bad.push(l); return; }
+    out[(+m[2]) * 12 + (+m[1] - 1)] = parseBR(m[3]);
+  });
+  return { out, bad };
+}
+
+function marcoTxt(o) { return o.jurosDesde === 'desconto' ? 'de cada desconto (Súmula 54/STJ)' : 'da citação' + (o.citacao ? ' (' + lbl(o.citacao) + ')' : ''); }
+function atualizacaoTxt(o) {
+  const semJuros = o.jurosDesde === 'nenhum';
+  if (o.regime === 'lei14905') return 'pelo IPCA desde cada desconto (art. 389, parágrafo único, do CC)' + (semJuros ? ', sem juros de mora, que fluirão a partir da citação (art. 405 do CC)' : ', com juros de mora pela taxa legal (SELIC deduzida do IPCA – art. 406, § 1º, do CC) contados ' + marcoTxt(o));
+  if (o.regime === 'selic') return semJuros ? 'pelo IPCA desde cada desconto, sem juros de mora, que fluirão a partir da citação (art. 405 do CC), quando passará a incidir exclusivamente a taxa SELIC' : 'pelo IPCA desde cada desconto até o marco dos juros e, a partir ' + marcoTxt(o) + ', exclusivamente pela taxa SELIC, que engloba correção e juros (art. 406 do CC)';
+  return 'pelo INPC até 29/08/2024 e pelo IPCA a partir de 30/08/2024, desde cada desconto' + (semJuros ? ', sem juros de mora, que fluirão a partir da citação (art. 405 do CC)' : ', com juros de mora de 1% ao mês até 29/08/2024 e pela taxa legal (SELIC deduzida do IPCA) a partir de então, contados ' + marcoTxt(o) + ', na forma da Lei 14.905/2024');
+}
+const DOBRO_TXT = {
+  modulado: 'em dobro quanto aos descontos posteriores a 30/03/2021 e de forma simples quanto aos anteriores, conforme a modulação fixada pelo STJ no EAREsp 676.608/RS',
+  integral: 'em dobro (art. 42, parágrafo único, do CDC)',
+  simples: 'de forma simples'
+};
+
+// parâmetros comuns (atualização e pedido)
+function lerComuns() {
+  const errs = [];
+  if (!$('base').value) errs.push('Preencha a data-base do cálculo.');
+  if ($('jurosDesde').value === 'citacao' && !$('citacao').value) errs.push('Informe o mês da citação.');
+  if (errs.length) throw new Error(errs.join(' '));
+  return { base: $('base').value, regime: $('regime').value, jurosDesde: $('jurosDesde').value, citacao: $('citacao').value || null, dobro: $('dobro').value, danoMoral: parseBR($('dano').value) || 0, cliente: $('cliente').value.trim() };
+}
+
+function lerEntrada() {
+  const P = parseBR($('valor').value), pmt = parseBR($('pmt').value), taxa = parseBR($('taxa').value);
+  const errs = [];
+  if (!(P > 0)) errs.push('Informe o valor recebido.');
+  if (!(pmt > 0)) errs.push('Informe o desconto mensal.');
+  if (!(taxa > 0)) errs.push('Informe a taxa mensal.');
+  ['contrato', 'primeiro', 'ultimo'].forEach(k => { if (!$(k).value) errs.push('Preencha o campo de data "' + document.querySelector('label[for=' + k + ']').textContent + '".'); });
+  const ex = parseExcecoes($('excecoes').value);
+  if (ex.bad.length) errs.push('Linha de desconto diferente não reconhecida: "' + ex.bad[0] + '".');
+  if (errs.length) throw new Error(errs.join(' '));
+  return {
+    ...lerComuns(), numContrato: $('numContrato').value.trim(), banco: $('banco').value.trim(), modalidade: $('modalidade').value,
+    P, fonteValor, pmt, taxa, contrato: $('contrato').value, primeiro: $('primeiro').value, ultimo: $('ultimo').value, excecoes: ex.out
+  };
+}
+
+// ===== textos =====
+function previsaoTxt(r) {
+  const p = r.previsao; if (!p) return '';
+  if (p.nunca) return 'o desconto mensal não cobre sequer os juros do saldo recalculado, de modo que a dívida não se extinguiria sem revisão do valor da parcela';
+  return 'mantido o mesmo desconto, a dívida recalculada estaria quitada em ' + idxToLabel(p.mes) + ', após mais ' + p.nRestantes + ' descontos (o último de ' + brl(p.ultimaParcela) + '), totalizando ' + brl(p.totalRestante) + ' a pagar a partir de agora';
+}
+function descContrato(inp) {
+  return 'cartão de crédito consignado (' + inp.modalidade + ')' + (inp.numContrato ? ' nº ' + inp.numContrato : '') + (inp.banco ? ', contratado com ' + inp.banco : '');
+}
+function valorTxt(inp) {
+  return inp.fonteValor === 'limite'
+    ? 'considerado como valor do crédito o limite do cartão, de ' + brl(inp.P) + ', em ' + lbl(inp.contrato)
+    : 'valor creditado de ' + brl(inp.P) + ', em ' + lbl(inp.contrato);
+}
+function textoPeticao(items) {
+  const c = items[0].inp, T = consolidar(items);
+  const quem = c.cliente ? 'a parte autora, ' + c.cliente + ',' : 'a parte autora';
+  let t;
+  if (items.length === 1) {
+    const { inp, r } = items[0];
+    t = 'Conforme memória de cálculo anexa, o ' + descContrato(inp) + ' (' + valorTxt(inp) + ') foi recalculado como empréstimo consignado comum, à taxa média de mercado divulgada pelo Banco Central do Brasil para o crédito pessoal consignado a aposentados e pensionistas do INSS no mês da contratação (' + num(inp.taxa) + '% a.m. – série SGS 25468), mantido o desconto mensal de ' + brl(inp.pmt) + '. ';
+    if (r.quit === null) return t + 'Nessa condição, até ' + lbl(inp.ultimo) + ' foram descontados ' + brl(r.totDesc) + ', restando saldo devedor recalculado de ' + brl(r.saldoAberto) + '; ' + previsaoTxt(r) + '. Não há, por ora, indébito a restituir quanto a esse contrato, impondo-se a conversão para que os descontos cessem na data indicada.';
+    t += 'Nessa condição, a dívida estaria integralmente quitada em ' + idxToLabel(r.quit) + ', após ' + r.nAteQuit + ' descontos. Contudo, até ' + lbl(inp.ultimo) + ' foram descontados ' + brl(r.totDesc) + ' do benefício, de modo que ' + r.nApos + ' parcelas posteriores à quitação, além do excedente do mês da quitação, totalizando ' + brl(r.totInd) + ', foram cobradas indevidamente. ';
+  } else {
+    t = 'Conforme memórias de cálculo anexas, ' + quem + ' possui ' + items.length + ' cartões de crédito consignado ativos, que foram recalculados individualmente como empréstimos consignados comuns, à taxa média de mercado divulgada pelo Banco Central do Brasil para o crédito pessoal consignado a aposentados e pensionistas do INSS no mês de cada contratação (série SGS 25468), mantidos os respectivos descontos mensais: ';
+    t += items.map(({ inp, r }, i) => '(' + romano(i + 1) + ') ' + descContrato(inp) + ', ' + valorTxt(inp) + ', taxa de ' + num(inp.taxa) + '% a.m. e desconto de ' + brl(inp.pmt) + ': ' +
+      (r.quit !== null ? 'quitação em ' + idxToLabel(r.quit) + ', após ' + r.nAteQuit + ' descontos, com indébito nominal de ' + brl(r.totInd) : 'ainda não quitado, com saldo recalculado de ' + brl(r.saldoAberto) + ' (' + previsaoTxt(r) + ')')).join('; ') + '. ';
+    t += 'Somados os contratos, foram descontados ' + brl(T.totDesc) + ' do benefício, dos quais ' + brl(T.totInd) + ' após as respectivas quitações (' + T.nApos + ' parcelas indevidas). ';
+  }
+  t += 'Atualizado até ' + lbl(c.base) + ' ' + atualizacaoTxt(c) + ', o indébito soma ' + brl(T.totAtual) + ', cuja restituição deve se dar ' + DOBRO_TXT[c.dobro] + ', o que resulta em ' + brl(T.totFinal) + '.';
+  if (c.danoMoral > 0) t += ' Somados os danos morais pleiteados (' + brl(c.danoMoral) + '), atribui-se à causa o valor de ' + brl(T.totFinal + c.danoMoral) + '.';
+  return t;
+}
+const romano = n => ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'][n - 1] || String(n);
+
+function consolidar(items) {
+  const T = { totDesc: 0, totInd: 0, totAtual: 0, totFinal: 0, totFinalSimples: 0, totFinalDobro: 0, nApos: 0, nParcelas: 0, avisos: [] };
+  items.forEach(({ r }) => {
+    ['totDesc', 'totInd', 'totAtual', 'totFinal', 'totFinalSimples', 'totFinalDobro', 'nApos', 'nParcelas'].forEach(k => T[k] += r[k]);
+    r.avisos.forEach(a => { if (!T.avisos.includes(a)) T.avisos.push(a); });
+  });
+  return T;
+}
+
+function metodologia(items) {
+  const c = items[0].inp;
+  const taxas = items.map(({ inp }) => num(inp.taxa) + '% a.m. (' + lbl(inp.contrato) + (items.length > 1 && inp.numContrato ? ', contrato ' + inp.numContrato : '') + ')').join('; ');
+  const lim = items.some(({ inp }) => inp.fonteValor === 'limite');
+  return [
+    'Taxa de juros: taxa média mensal do BACEN para crédito pessoal consignado a aposentados e pensionistas do INSS (SGS 25468) do mês da contratação: ' + taxas + '.',
+    items.length > 1 ? 'Cada contrato foi recalculado separadamente, com sua data, taxa e desconto; os resultados foram somados.' : null,
+    items.some(({ inp }) => inp.hiscre) ? 'Descontos: valores efetivamente descontados em cada competência, conforme o Histórico de Créditos (HISCRE) do INSS; nos meses não constantes do histórico, o valor reservado atual.' : null,
+    lim ? 'Valor do crédito: na falta do valor sacado no extrato do INSS, foi considerado o limite do cartão informado no extrato.' : null,
+    'Amortização mês a mês: juros = saldo × taxa; amortização = desconto − juros. Quitado o saldo, o excedente do mês e todos os descontos seguintes são indébito.',
+    'Atualização desde cada desconto (Súmula 43/STJ), pelo produto dos índices mensais posteriores ao mês do desconto até a data-base, ' + atualizacaoTxt(c) + '.',
+    'Juros de mora somados mês a mês de forma simples; a taxa legal (SELIC − IPCA) nunca é negativa (art. 406, § 3º, do CC). A taxa SELIC, quando aplicada isoladamente, também é somada de forma simples.',
+    'Repetição do indébito ' + DOBRO_TXT[c.dobro] + '.',
+    'Fontes: Banco Central do Brasil – SGS (25468 taxa do consignado INSS; 433 IPCA; 188 INPC; 4390 SELIC mensal).'
+  ].filter(Boolean);
+}
+
+// ===== tela de resultado =====
+function tabelaHTML(inp, r) {
+  let h = '<table><thead><tr><th>Compet.</th><th>Saldo inicial</th><th>Juros (' + num(inp.taxa) + '%)</th><th>Desconto</th><th>Amortização</th><th>Saldo final</th><th>Situação</th><th>Indébito</th><th>Fator corr.</th><th>Juros mora</th><th>Atualizado</th><th>Dobro</th><th>A restituir</th></tr></thead><tbody>';
+  r.rows.forEach(x => {
+    const c = x.situacao === 'quitação' ? 'q' : x.situacao === 'indébito' ? 'i' : '';
+    const tg = x.situacao === 'quitação' ? 'q' : x.situacao === 'indébito' ? 'i' : 'a';
+    h += '<tr class="' + c + '"><td>' + x.comp + '</td><td>' + num(x.saldoIni) + '</td><td>' + num(x.juros) + '</td><td>' + num(x.desconto) + '</td><td>' + num(x.amort) + '</td><td>' + num(x.saldoFim) + '</td><td class="sit"><span class="tag ' + tg + '">' + x.situacao + '</span></td>' +
+      (x.indebito > 0 ? '<td>' + num(x.indebito) + '</td><td>' + num(x.fator, 6) + '</td><td>' + num(x.jurosPct * 100) + '%</td><td>' + num(x.atualizado) + '</td><td>' + (x.dobro ? 'sim' : 'não') + '</td><td>' + num(x.final) + '</td>' : '<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>') + '</tr>';
+  });
+  if (r.previsao && r.previsao.rows) {
+    h += '<tr class="sep"><td colspan="13">Projeção até a quitação (mesmo desconto e mesma taxa)</td></tr>';
+    r.previsao.rows.forEach(x => { h += '<tr class="p"><td>' + x.comp + '</td><td>' + num(x.saldoIni) + '</td><td>' + num(x.juros) + '</td><td>' + num(x.desconto) + '</td><td>' + num(x.amort) + '</td><td>' + num(x.saldoFim) + '</td><td class="sit"><span class="tag p">a vencer</span></td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>'; });
+  }
+  return h + '</tbody><tfoot><tr><td>Totais</td><td></td><td></td><td>' + num(r.totDesc) + '</td><td></td><td></td><td></td><td>' + num(r.totInd) + '</td><td></td><td></td><td>' + num(r.totAtual) + '</td><td></td><td>' + num(r.totFinal) + '</td></tr></tfoot></table>';
+}
+
+let ultimo = null;
+function render(items) {
+  const c = items[0].inp, T = consolidar(items), multi = items.length > 1;
+  const k = [];
+  if (!multi) {
+    const r = items[0].r;
+    if (r.quit !== null) k.push(['Quitação como consignado', idxToLabel(r.quit), r.nAteQuit + ' descontos', '']);
+    else if (r.previsao && !r.previsao.nunca) {
+      k.push(['Quitação prevista', idxToLabel(r.previsao.mes), 'faltam ' + r.previsao.nRestantes + ' descontos', 'hl']);
+      k.push(['Saldo recalculado hoje', brl(r.saldoAberto), 'a pagar: ' + brl(r.previsao.totalRestante), '']);
+    } else k.push(['Quitação prevista', 'não quita', 'desconto menor que os juros', 'bad']);
+  } else {
+    k.push(['Contratos somados', String(items.length), items.map(({ inp, r }) => (inp.numContrato ? inp.numContrato + ': ' : '') + (r.quit !== null ? 'quitado em ' + idxToLabel(r.quit) : r.previsao && !r.previsao.nunca ? 'quitação prevista ' + idxToLabel(r.previsao.mes) : 'não quita')).join(' · '), '']);
+  }
+  k.push(['Parcelas pagas a mais', String(T.nApos), 'após a quitação', 'bad']);
+  k.push(['Total descontado', brl(T.totDesc), T.nParcelas + ' descontos', '']);
+  k.push(['Indébito nominal', brl(T.totInd), 'sem correção', 'bad']);
+  k.push(['Indébito atualizado', brl(T.totAtual), 'até ' + lbl(c.base), '']);
+  k.push(['Total a restituir', brl(T.totFinal), c.dobro === 'modulado' ? 'simples ' + brl(T.totFinalSimples) + ' · dobro ' + brl(T.totFinalDobro) : (c.dobro === 'integral' ? 'em dobro' : 'simples'), 'hl']);
+  if (c.danoMoral > 0) k.push(['Valor da causa', brl(T.totFinal + c.danoMoral), 'com danos morais', 'hl']);
+  // destaque principal
+  let hero;
+  if (T.totFinal > 0) hero = ['Total a restituir ao cliente', brl(T.totFinal), 'indébito de ' + brl(T.totInd) + ' atualizado até ' + lbl(c.base) + (c.dobro !== 'simples' ? ', com dobro após 03/2021' : ''), T.nApos + ' parcelas descontadas depois da quitação'];
+  else {
+    const pv = items.map(x => x.r.previsao).filter(p => p && !p.nunca);
+    const fim = pv.length ? Math.max(...pv.map(p => p.mes)) : null;
+    hero = fim !== null ? ['Como consignado, a dívida acaba em', idxToLabel(fim), 'saldo recalculado hoje: ' + brl(items.reduce((s, x) => s + x.r.saldoAberto, 0)) + ' · faltam ' + Math.max(...pv.map(p => p.nRestantes)) + ' descontos', 'Sem conversão, o desconto não teria data para acabar']
+      : ['Situação do contrato', 'Não quita', 'o desconto não cobre os juros do saldo recalculado', 'Revisão da parcela necessária'];
+  }
+  $('hero').innerHTML = '<div class="hero"><div class="l">' + hero[0] + '</div><div class="v">' + hero[1] + '</div><div class="s">' + hero[2] + '</div><span class="tagline">' + hero[3] + '</span></div>';
+  // linha do tempo de cada contrato
+  $('tl').innerHTML = items.map(({ inp, r }) => {
+    const pagas = r.rows.filter(x => x.situacao !== 'indébito' && x.desconto > 0).length;
+    const indev = r.rows.filter(x => x.situacao === 'indébito' && x.desconto > 0).length;
+    const vencer = r.previsao && r.previsao.rows ? r.previsao.nRestantes : 0;
+    const tot = Math.max(1, pagas + indev + vencer);
+    const seg = (n, cls, txt) => n ? '<span class="' + cls + '" style="flex:' + n + '" title="' + txt + '">' + (n / tot > .18 ? txt : '') + '</span>' : '';
+    const fimLbl = vencer ? idxToLabel(r.previsao.mes) : lbl(inp.ultimo);
+    const meio = r.quit !== null ? 'quitado ' + idxToLabel(r.quit) : 'hoje ' + lbl(inp.ultimo);
+    return '<div class="row"><div class="h"><b>' + esc(inp.modalidade + (inp.numContrato ? ' · ' + inp.numContrato : '') + (inp.banco ? ' · ' + inp.banco : '')) + '</b><span>' + brl(inp.P) + ' · ' + num(inp.taxa) + '% a.m.</span></div>' +
+      '<div class="bar">' + seg(pagas, 'a', pagas + ' para quitar') + seg(indev, 'i', indev + ' indevidas') + seg(vencer, 'p', vencer + ' a vencer') + '</div>' +
+      '<div class="marks"><span>' + lbl(inp.contrato) + '</span><span>' + meio + '</span><span>' + fimLbl + '</span></div></div>';
+  }).join('') + '<div class="legend"><span><i style="background:var(--blue)"></i>Descontos que quitam a dívida</span><span><i style="background:var(--bad)"></i>Descontados a mais</span><span><i style="background:#cbd8ea"></i>Ainda a vencer como consignado</span></div>';
+  $('kpis').innerHTML = k.map(([l, v, s, cl]) => '<div class="kpi ' + cl + '"><div class="l">' + l + '</div><div class="v">' + v + '</div><div class="s">' + s + '</div></div>').join('');
+
+  const devido = T.totDesc - T.totInd;
+  const pd = T.totDesc > 0 ? Math.max(0, Math.min(100, devido / T.totDesc * 100)) : 0;
+  $('compare').innerHTML = T.totDesc > 0 ? '<div class="bar"><span style="width:' + pd + '%;background:#1f4f82">' + (pd > 32 ? 'devido' : '') + '</span><span style="width:' + (100 - pd) + '%;background:#c0392b">' + (100 - pd > 32 ? 'indevido' : '') + '</span></div>' +
+    '<div class="legend"><span><i style="background:#1f4f82"></i>Seria devido como consignado: <b>' + brl(devido) + '</b></span><span><i style="background:#c0392b"></i>Descontado a mais: <b>' + brl(T.totInd) + '</b></span></div>' : '';
+  $('avisos').innerHTML = T.avisos.map(a => '<div class="aviso">' + a + '</div>').join('');
+  $('texto').textContent = textoPeticao(items);
+  $('tabs').innerHTML = items.map(({ inp, r }) =>
+    (multi ? '<h3 class="subt">' + esc(inp.modalidade + ' · ' + (inp.banco || '') + (inp.numContrato ? ' · contrato ' + inp.numContrato : '')) + '<span>' + brl(inp.P) + ' em ' + lbl(inp.contrato) + ' · ' + num(inp.taxa) + '% a.m. · desconto ' + brl(inp.pmt) + '</span></h3>' : '') +
+    '<div class="tablewrap">' + tabelaHTML(inp, r) + '</div>').join('');
+  $('metodo').innerHTML = metodologia(items).map(m => '<li>' + m + '</li>').join('');
+  $('resultado').style.display = 'block';
+  ultimo = items;
+  setTimeout(() => $('resultado').scrollIntoView({ behavior: 'smooth' }), 50);
+}
+
+$('calc').addEventListener('click', () => {
+  $('err').style.display = 'none';
+  if (modoExtrato && extraidos) { calcularExtraidos(); return; }
+  try { const inp = lerEntrada(); render([{ inp, r: calcular(inp, D) }]); }
+  catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }
+});
+
+$('copiar').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('texto').textContent); toast('Texto copiado'); }
+  catch (e) { const s = window.getSelection(), rg = document.createRange(); rg.selectNodeContents($('texto')); s.removeAllRanges(); s.addRange(rg); toast('Selecionei o texto: copie com Ctrl+C ou segurando o dedo'); }
+});
+
+// ===== Word (.docx) =====
+let downloadsP = null;
+try { downloadsP = window.claude && window.claude.use ? window.claude.use('downloads') : null; } catch (e) { downloadsP = null; }
+function carregarScript(src) {
+  return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('Falha ao carregar ' + src)); document.head.appendChild(s); });
+}
+async function carregarDocx() {
+  if (window.docx && window.docx.Packer) return window.docx;
+  await carregarScript('https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js');
+  if (!(window.docx && window.docx.Packer)) throw new Error('Não consegui carregar o gerador de Word.');
+  return window.docx;
+}
+async function gerarDocx(items) {
+  const d = await carregarDocx();
+  const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, PageOrientation, ShadingType } = d;
+  const F = 'Times New Roman', c0 = items[0].inp, T = consolidar(items);
+  const p = (text, o = {}) => new Paragraph({ alignment: o.align || AlignmentType.JUSTIFIED, spacing: { after: o.after ?? 120, line: 300 }, children: [new TextRun({ text, bold: !!o.bold, size: o.size || 24, font: F })] });
+  const cell = (t, o = {}) => new TableCell({
+    shading: o.head ? { type: ShadingType.CLEAR, fill: '14365C', color: 'auto' } : (o.fill ? { type: ShadingType.CLEAR, fill: o.fill, color: 'auto' } : undefined),
+    margins: { top: 30, bottom: 30, left: 60, right: 60 },
+    children: [new Paragraph({ alignment: o.left ? AlignmentType.LEFT : AlignmentType.RIGHT, children: [new TextRun({ text: t, size: 15, font: 'Arial', bold: !!(o.head || o.bold), color: o.head ? 'FFFFFF' : '000000' })] })]
+  });
+  const kv = linhas => new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: linhas.map(([a, b]) => new TableRow({ children: [
+    new TableCell({ width: { size: 40, type: WidthType.PERCENTAGE }, margins: { top: 40, bottom: 40, left: 80, right: 80 }, shading: { type: ShadingType.CLEAR, fill: 'EEF2F7', color: 'auto' }, children: [new Paragraph({ children: [new TextRun({ text: a, bold: true, size: 20, font: F })] })] }),
+    new TableCell({ margins: { top: 40, bottom: 40, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: b, size: 20, font: F })] })] })
+  ] })) });
+  const memoria = (inp, r) => {
+    const heads = ['Compet.', 'Saldo inicial', 'Juros', 'Desconto', 'Amortização', 'Saldo final', 'Situação', 'Indébito', 'Fator corr.', 'Juros mora', 'Atualizado', 'Dobro', 'A restituir'];
+    const rows = [new TableRow({ tableHeader: true, children: heads.map((h, i) => cell(h, { head: true, left: i === 0 })) })];
+    r.rows.forEach(x => {
+      const fill = x.situacao === 'quitação' ? 'FFF3D6' : x.situacao === 'indébito' ? 'FBE6E4' : undefined, ind = x.indebito > 0;
+      rows.push(new TableRow({ children: [
+        cell(x.comp, { left: true, fill }), cell(num(x.saldoIni), { fill }), cell(num(x.juros), { fill }), cell(num(x.desconto), { fill }), cell(num(x.amort), { fill }), cell(num(x.saldoFim), { fill }), cell(x.situacao, { fill }),
+        cell(ind ? num(x.indebito) : '–', { fill }), cell(ind ? num(x.fator, 6) : '–', { fill }), cell(ind ? num(x.jurosPct * 100) + '%' : '–', { fill }), cell(ind ? num(x.atualizado) : '–', { fill }), cell(ind ? (x.dobro ? 'sim' : 'não') : '–', { fill }), cell(ind ? num(x.final) : '–', { fill })
+      ] }));
+    });
+    if (r.previsao && r.previsao.rows) {
+      rows.push(new TableRow({ children: [new TableCell({ columnSpan: 13, shading: { type: ShadingType.CLEAR, fill: 'E3ECF7', color: 'auto' }, children: [new Paragraph({ children: [new TextRun({ text: 'Projeção até a quitação (mesmo desconto e mesma taxa)', bold: true, size: 15, font: 'Arial' })] })] })] }));
+      r.previsao.rows.forEach(x => rows.push(new TableRow({ children: [cell(x.comp, { left: true }), cell(num(x.saldoIni)), cell(num(x.juros)), cell(num(x.desconto)), cell(num(x.amort)), cell(num(x.saldoFim)), cell('a vencer'), cell('–'), cell('–'), cell('–'), cell('–'), cell('–'), cell('–')] })));
+    }
+    rows.push(new TableRow({ children: ['Totais', '', '', num(r.totDesc), '', '', '', num(r.totInd), '', '', num(r.totAtual), '', num(r.totFinal)].map((t, i) => cell(t, { bold: true, left: i === 0, fill: 'E6EBF2' })) }));
+    return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows });
+  };
+  const resumoContrato = (inp, r) => [
+    ['Banco', inp.banco || '—'], ['Contrato', inp.numContrato || '—'], ['Modalidade', inp.modalidade],
+    [inp.fonteValor === 'limite' ? 'Valor do crédito (limite do cartão)' : 'Valor recebido', brl(inp.P) + ' em ' + lbl(inp.contrato)], ['Desconto mensal', brl(inp.pmt)],
+    ['Período dos descontos', lbl(inp.primeiro) + ' a ' + lbl(inp.ultimo) + ' (' + r.nParcelas + ' descontos)'],
+    ['Taxa aplicada', num(inp.taxa) + '% a.m. (BACEN – SGS 25468)'],
+    r.quit !== null ? ['Quitação como consignado', idxToLabel(r.quit) + ' (' + r.nAteQuit + ' descontos)'] :
+      ['Quitação prevista', r.previsao && !r.previsao.nunca ? idxToLabel(r.previsao.mes) + ' – faltam ' + r.previsao.nRestantes + ' descontos; saldo recalculado ' + brl(r.saldoAberto) + '; total a pagar ' + brl(r.previsao.totalRestante) : 'não quita: desconto menor que os juros'],
+    ['Parcelas pagas após a quitação', String(r.nApos)], ['Total descontado', brl(r.totDesc)], ['Indébito nominal', brl(r.totInd)],
+    ['Indébito atualizado até ' + lbl(inp.base), brl(r.totAtual)], ['Total a restituir', brl(r.totFinal)]
+  ];
+  const children = [
+    p('MEMÓRIA DE CÁLCULO', { bold: true, align: AlignmentType.CENTER, size: 28, after: 60 }),
+    p('Conversão de cartão de crédito consignado em empréstimo consignado e apuração do indébito', { align: AlignmentType.CENTER, after: 240 })
+  ];
+  if (items.length === 1) {
+    const linhas = [['Cliente', c0.cliente || '—'], ...resumoContrato(items[0].inp, items[0].r)];
+    if (c0.danoMoral > 0) linhas.push(['Danos morais pleiteados', brl(c0.danoMoral)], ['Valor da causa', brl(T.totFinal + c0.danoMoral)]);
+    children.push(kv(linhas));
+  } else {
+    const linhas = [['Cliente', c0.cliente || '—'], ['Contratos calculados', String(items.length)], ['Total descontado', brl(T.totDesc)], ['Parcelas pagas após as quitações', String(T.nApos)], ['Indébito nominal', brl(T.totInd)], ['Indébito atualizado até ' + lbl(c0.base), brl(T.totAtual)], ['Total a restituir', brl(T.totFinal)]];
+    if (c0.danoMoral > 0) linhas.push(['Danos morais pleiteados', brl(c0.danoMoral)], ['Valor da causa', brl(T.totFinal + c0.danoMoral)]);
+    children.push(kv(linhas));
+  }
+  children.push(p('', { after: 120 }), p('Síntese', { bold: true }), p(textoPeticao(items)), p('Metodologia', { bold: true }),
+    ...metodologia(items).map((m, i) => p((i + 1) + '. ' + m, { after: 80 })), ...T.avisos.map(a => p('Observação: ' + a, { after: 80 })));
+  items.forEach(({ inp, r }, i) => {
+    children.push(p('', { after: 160 }));
+    if (items.length > 1) { children.push(p('Contrato ' + (i + 1) + ' – ' + inp.modalidade + (inp.numContrato ? ' nº ' + inp.numContrato : '') + (inp.banco ? ' – ' + inp.banco : ''), { bold: true })); children.push(kv(resumoContrato(inp, r))); children.push(p('', { after: 120 })); }
+    children.push(p('Memória mês a mês' + (items.length > 1 ? ' – contrato ' + (i + 1) : ''), { bold: true }), memoria(inp, r));
+  });
+  children.push(p('', { after: 240 }), p('Goiânia, ' + hoje.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }) + '.', { align: AlignmentType.RIGHT }));
+  const doc = new Document({ sections: [{ properties: { page: { size: { orientation: PageOrientation.LANDSCAPE }, margin: { top: 900, bottom: 900, left: 900, right: 900 } } }, children }] });
+  return Packer.toBlob(doc);
+}
+
+$('btnDocx').addEventListener('click', async () => {
+  if (!ultimo) return;
+  const btn = $('btnDocx'); const old = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
+  try {
+    const blob = await gerarDocx(ultimo);
+    const c = ultimo[0].inp;
+    const nome = 'Memoria_calculo_' + (ultimo.length > 1 ? 'cartoes_consignados' : c.modalidade) + (c.cliente ? '_' + c.cliente.split(' ')[0] : '') + '.docx';
+    const dl = downloadsP ? await downloadsP : null;
+    if (dl) {
+      try { await dl.save({ filename: nome, data: blob }); toast('Arquivo salvo'); }
+      catch (e) { if (e && e.code === 'declined') toast('Download cancelado'); else throw new Error('Download indisponível nesta tela.'); }
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+      toast('Se o download não iniciar, abra a calculadora em claude.ai');
+    }
+  } catch (e) { toast(e.message || 'Falha ao gerar o Word'); }
+  finally { btn.textContent = old; btn.disabled = false; }
+});
+
+// ===== Leitura do extrato do INSS =====
+let sampleP = null;
+try { sampleP = window.claude && window.claude.use ? window.claude.use('sample') : null; } catch (e) { sampleP = null; }
+const upStatus = (html, on = true) => { const s = $('upStatus'); s.innerHTML = html; s.classList.toggle('on', on); };
+async function carregarPdfjs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  await carregarScript(base + 'pdf.worker.min.js');
+  await carregarScript(base + 'pdf.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+async function lerPdf(file) {
+  const pdfjs = await carregarPdfjs();
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  let texto = ''; const imgs = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const linhas = {};
+    tc.items.forEach(it => { const y = Math.round(it.transform[5]); (linhas[y] = linhas[y] || []).push(it); });
+    Object.keys(linhas).map(Number).sort((a, b) => b - a).forEach(y => {
+      texto += linhas[y].sort((a, b) => a.transform[4] - b.transform[4]).map(i => i.str).join('  ').replace(/\s{3,}/g, '  ') + '\n';
+    });
+    texto += '\n--- página ' + p + ' ---\n';
+    if (p <= 4) {
+      const vp = page.getViewport({ scale: 1.6 });
+      const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      imgs.push(await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85)));
+    }
+  }
+  return { texto, imgs };
+}
+
+const PROMPT_EXTRATO = `Você é um assistente jurídico. Abaixo está o conteúdo de um "Extrato de Empréstimos Consignados" do INSS (Meu INSS) ou documento equivalente.
+Extraia SOMENTE os contratos de CARTÃO DE CRÉDITO CONSIGNADO (RMC – Reserva de Margem Consignável / cartão de crédito; RCC – Reserva de Cartão Consignado / cartão consignado de benefício) que estejam ATIVOS.
+NÃO inclua: empréstimos consignados comuns/pessoais (mesmo ativos); contratos excluídos, encerrados, quitados, liquidados, cancelados, inativos ou com data de exclusão; contratos de outros benefícios que não sejam cartão.
+Se não houver nenhum cartão RMC/RCC ativo, devolva "contratos": [].
+Para cada cartão, extraia:
+- ativo: true SOMENTE se o extrato mostrar expressamente a situação "Ativo"/"Ativa" para esse contrato; caso contrário false
+- secao: título da seção do extrato onde o contrato aparece (ex.: "Cartão de Crédito – RMC", "Cartão Consignado de Benefício – RCC", "Empréstimos Bancários")
+- modalidade: "RMC" ou "RCC"
+- banco: nome do banco/instituição financeira exatamente como aparece no extrato, sem o código numérico (ex.: "318 - BANCO BMG S.A." → "Banco BMG S.A."). Procure em toda a linha/bloco do contrato; o nome do banco quase sempre consta.
+- contrato: número do contrato, como aparece (somente dígitos/letras do número)
+- situacao: ex. "Ativo", "Suspenso"
+- data_inclusao: data de inclusão/contratação, OBRIGATÓRIA quando constar (no extrato do INSS aparece como "Data inclusão" ou "Data de inclusão"), no formato "AAAA-MM-DD"
+- data_exclusao: data de exclusão/encerramento, se houver, "AAAA-MM-DD"
+- valor_parcela: valor reservado/descontado por mês (R$), número
+- valor_emprestado: valor efetivamente liberado/sacado ao beneficiário (saque, "valor liberado", "valor emprestado"), número. NÃO use o limite do cartão aqui.
+- limite_cartao: limite do cartão, número
+- parcelas_pagas: quantidade de descontos já realizados, se constar
+- primeiro_desconto: competência do 1º desconto, "AAAA-MM", se constar
+- ultimo_desconto: competência do último desconto, "AAAA-MM", se constar
+Também extraia beneficiario (nome do titular) e beneficio (número do benefício).
+Regras: não invente nem estime; use null para o que não constar. Números em formato JSON (1500.5, sem "R$" nem separador de milhar).
+Responda apenas com JSON neste formato:
+{"beneficiario":null,"beneficio":null,"contratos":[{"modalidade":"RMC","banco":"","contrato":"","situacao":"","data_inclusao":null,"data_exclusao":null,"valor_parcela":null,"valor_emprestado":null,"limite_cartao":null,"parcelas_pagas":null,"primeiro_desconto":null,"ultimo_desconto":null}],"observacoes":""}`;
+
+let extraidos = null;
+function ymOf(s) {
+  if (!s) return null; s = String(s).trim();
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})/); if (m) return m[1] + '-' + m[2].padStart(2, '0');
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/); if (m) return m[3] + '-' + m[2].padStart(2, '0');
+  m = s.match(/^(\d{1,2})[-\/.](\d{4})$/); if (m) return m[2] + '-' + m[1].padStart(2, '0');
+  return null;
+}
+const dataBR = s => { const y = ymOf(s); if (!y) return '—'; const m = String(s).match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/) || String(s).match(/^(\d{4})-(\d{2})-(\d{2})/); if (m && m[1].length === 4) return m[3] + '/' + m[2] + '/' + m[1]; if (m) return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + m[3]; return lbl(y); };
+let textoExtrato = '';
+// procura a data de inclusão na linha do contrato, quando a leitura não trouxe
+function dataNoTexto(contrato) {
+  if (!contrato || !textoExtrato) return null;
+  const linhas = textoExtrato.split('\n');
+  for (let i = 0; i < linhas.length; i++) {
+    if (linhas[i].replace(/\D/g, '').includes(String(contrato).replace(/\D/g, '')) && String(contrato).replace(/\D/g, '').length >= 4) {
+      const bloco = linhas.slice(i, i + 3).join(' ');
+      const m = bloco.match(/(\d{2})\/(\d{2})\/(\d{4})/); if (m) return m[3] + '-' + m[2] + '-' + m[1];
+    }
+  }
+  return null;
+}
+const valorRef = c => (typeof c.valor_emprestado === 'number' && c.valor_emprestado > 0) ? { v: c.valor_emprestado, fonte: 'saque' } : (typeof c.limite_cartao === 'number' && c.limite_cartao > 0) ? { v: c.limite_cartao, fonte: 'limite' } : { v: null, fonte: 'manual' };
+
+async function processarArquivos(files, textoColado) {
+  $('contratos').innerHTML = '';
+  const sample = sampleP ? await sampleP : null;
+  if (!sample) { upStatus('A leitura automática só funciona com a calculadora aberta no Claude. Preencha os campos abaixo manualmente.'); return; }
+  try {
+    upStatus('<span class="spin"></span>Lendo o arquivo…');
+    let texto = textoColado || '', imgs = [];
+    textoExtrato = '';
+    for (const f of files) {
+      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) { const r = await lerPdf(f); texto += r.texto; imgs.push(...r.imgs); }
+      else if (/^image\//.test(f.type)) imgs.push(f);
+    }
+    textoExtrato = texto;
+    const temTexto = texto.replace(/\s|-|página|\d/g, '').length > 150;
+    const lim = await sample.limits().catch(() => null);
+    const podeImg = !!(lim && lim.images);
+    if (!temTexto && (!imgs.length || !podeImg)) throw { code: 'sem_conteudo' };
+    upStatus('<span class="spin"></span>Identificando os cartões RMC/RCC ativos… (pode levar alguns segundos)');
+    const prompt = PROMPT_EXTRATO + (temTexto ? '\n\nCONTEÚDO DO EXTRATO:\n' + texto.slice(0, 120000) : '\n\nO extrato está nas imagens anexas.');
+    const opts = {};
+    if (!temTexto) opts.images = imgs.slice(0, lim.images.maxCount);
+    const j = await sample.json(prompt, opts);
+    const todos = (j && Array.isArray(j.contratos)) ? j.contratos.filter(c => c && (c.modalidade || c.banco)) : [];
+    // só entra: cartão RMC/RCC, situação expressamente ativa, sem data de exclusão, fora da seção de empréstimos
+    const sit = c => String(c.situacao || '').toLowerCase();
+    const ehAtivo = c => c.ativo === true && /\bativ[oa]\b/.test(sit(c)) && !/inativ|exclu|encerr|quitad|liquid|cancel|baixad|finaliz|suspen/.test(sit(c)) && !c.data_exclusao;
+    const ehCartao = c => /^(RMC|RCC)$/i.test(String(c.modalidade || '').trim()) && !/empr[eé]stimo/i.test(String(c.secao || ''));
+    const lista = todos.filter(c => ehCartao(c) && ehAtivo(c));
+    lista.forEach(c => { c.modalidade = String(c.modalidade).trim().toUpperCase(); if (!ymOf(c.data_inclusao)) c.data_inclusao = dataNoTexto(c.contrato); });
+    const ignorados = todos.length - lista.length;
+    extraidos = { ...j, contratos: lista, ignorados };
+    if (j.beneficiario) $('cliente').value = j.beneficiario;
+    if (!lista.length) { upStatus('Não encontrei cartão RMC ou RCC <b>ativo</b> nesse extrato' + (ignorados ? ' (' + ignorados + ' contrato(s) excluído(s), quitado(s) ou de outra modalidade foram desconsiderados)' : '') + '. Confira o extrato ou preencha manualmente.'); return; }
+    mostrarContratos();
+    calcularExtraidos();
+  } catch (e) {
+    const msg = {
+      sem_conteudo: 'Não consegui ler o conteúdo do arquivo. Envie o PDF baixado do Meu INSS ou uma foto nítida.',
+      not_granted: 'A leitura automática não foi autorizada. Preencha os campos manualmente.',
+      rate_limited: 'Muitas leituras em pouco tempo. Aguarde um pouco e tente de novo.',
+      invalid_json: 'Não consegui organizar os dados do extrato. Tente enviar de novo.',
+      image_rejected: 'A imagem não foi aceita. Envie outra foto ou o PDF.',
+      images_unavailable: 'Este extrato é uma imagem e a leitura de imagens não está disponível aqui. Envie o PDF do Meu INSS.'
+    }[e && e.code] || ('Falha ao ler o extrato' + (e && e.message ? ': ' + e.message : '') + '. Tente de novo ou preencha manualmente.');
+    upStatus(msg);
+  }
+}
+
+// ===== HISCRE: descontos mês a mês =====
+let hiscre = null; // { RMC: {idx: valor}, RCC: {idx: valor}, n }
+const hStatus = (html) => { const s = $('hStatus'); s.innerHTML = html; s.classList.add('on'); };
+const PROMPT_HISCRE = `Abaixo está o "Histórico de Créditos" (HISCRE) de um benefício do INSS, com os pagamentos mês a mês e os descontos de cada competência.
+Extraia TODOS os descontos de CARTÃO CONSIGNADO, mês a mês:
+- RMC: rubricas de reserva de margem consignável / cartão de crédito (ex.: "EMPRESTIMO SOBRE A RMC", "RESERVA DE MARGEM CONSIGNAVEL", "CARTAO DE CREDITO")
+- RCC: rubricas de cartão consignado de benefício (ex.: "CARTAO CONSIGNADO DE BENEFICIO", "RCC")
+NÃO inclua empréstimos consignados comuns (ex.: "CONSIGNACAO EMPRESTIMO BANCARIO"), imposto, pensão ou outros descontos.
+Para cada desconto: competencia ("AAAA-MM", a competência do pagamento), modalidade ("RMC" ou "RCC"), rubrica (texto como aparece), valor (número, sem R$).
+Não invente valores. Responda só com JSON: {"lancamentos":[{"competencia":"2024-01","modalidade":"RMC","rubrica":"","valor":110.0}]}`;
+async function processarHiscre(file) {
+  const sample = sampleP ? await sampleP : null;
+  if (!sample) { hStatus('A leitura automática só funciona com a calculadora aberta no Claude.'); return; }
+  try {
+    hStatus('<span class="spin"></span>Lendo o histórico de créditos…');
+    let texto = '', imgs = [];
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) { const r = await lerPdf(file); texto = r.texto; imgs = r.imgs; } else imgs = [file];
+    const temTexto = texto.replace(/\s|-|página|\d/g, '').length > 150;
+    const lim = await sample.limits().catch(() => null);
+    if (!temTexto && !(lim && lim.images)) throw { code: 'sem_conteudo' };
+    hStatus('<span class="spin"></span>Separando os descontos de cartão RMC/RCC mês a mês… (pode levar até um minuto)');
+    const j = await sample.json(PROMPT_HISCRE + (temTexto ? '\n\nCONTEÚDO:\n' + texto.slice(0, 200000) : '\n\nO histórico está nas imagens anexas.'), temTexto ? {} : { images: imgs.slice(0, lim.images.maxCount) });
+    const h = { RMC: {}, RCC: {}, n: 0 };
+    (j && Array.isArray(j.lancamentos) ? j.lancamentos : []).forEach(l => {
+      const mod = String(l.modalidade || '').trim().toUpperCase(), ym = ymOf(l.competencia), v = parseBR(l.valor);
+      if ((mod === 'RMC' || mod === 'RCC') && ym && v > 0) { const k = ymToIdx(ym); h[mod][k] = (h[mod][k] || 0) + v; h.n++; }
+    });
+    if (!h.n) { hStatus('Não encontrei descontos de cartão RMC/RCC nesse histórico. Confira se é o HISCRE do benefício certo.'); return; }
+    hiscre = h;
+    const resumo = ['RMC', 'RCC'].filter(m => Object.keys(h[m]).length).map(m => {
+      const ks = Object.keys(h[m]).map(Number).sort((a, b) => a - b), vs = ks.map(k => h[m][k]);
+      return m + ': ' + ks.length + ' meses (' + idxToLabel(ks[0]) + ' a ' + idxToLabel(ks[ks.length - 1]) + '), de ' + brl(Math.min(...vs)) + ' a ' + brl(Math.max(...vs));
+    }).join(' · ');
+    hStatus('Histórico lido. ' + resumo + '.' + (extraidos ? ' Recalculei com os valores mês a mês.' : ' Envie também o extrato de empréstimos para calcular.'));
+    if (extraidos && $('contratos').querySelector('.ct')) calcularExtraidos();
+  } catch (e) {
+    hStatus({ sem_conteudo: 'Não consegui ler o arquivo. Envie o PDF do Meu INSS.', not_granted: 'A leitura não foi autorizada.', rate_limited: 'Muitas leituras seguidas. Aguarde e tente de novo.', invalid_json: 'Não consegui organizar os dados. Tente de novo.' }[e && e.code] || ('Falha ao ler o histórico' + (e && e.message ? ': ' + e.message : '') + '.'));
+  }
+}
+$('arqH').addEventListener('change', e => { const f = e.target.files[0]; if (f) processarHiscre(f); setTimeout(() => { e.target.value = ''; }, 0); });
+// valores do HISCRE para um contrato: só quando há um único contrato daquela modalidade entre os marcados
+function descontosHiscre(mod, qtdMesmaModalidade) {
+  if (!hiscre || !hiscre[mod] || !Object.keys(hiscre[mod]).length || qtdMesmaModalidade > 1) return null;
+  return hiscre[mod];
+}
+
+// cartões editáveis: cada contrato com valor, desconto e mês de inclusão
+function mostrarContratos() {
+  const lista = extraidos.contratos;
+  $('contratos').innerHTML = lista.map((c, i) => {
+    const vr = valorRef(c);
+    return '<div class="ct" data-i="' + i + '"><div class="top"><label class="chk"><input type="checkbox" class="c-usar" checked> <span class="t">' + esc(c.modalidade) + ' · ' + esc(c.banco || 'banco não identificado') + '</span></label><span class="tag i">' + esc(c.situacao || 'Ativo') + '</span></div>' +
+      '<div class="m">Contrato ' + esc(c.contrato || '—') + ' · incluído em ' + dataBR(c.data_inclusao) + (c.limite_cartao ? ' · limite ' + brl(c.limite_cartao) : '') + (c.valor_emprestado ? ' · valor sacado ' + brl(c.valor_emprestado) : '') + '</div>' +
+      '<div class="ctgrid">' +
+      '<div><label>' + (vr.fonte === 'saque' ? 'Valor sacado (R$)' : 'Valor do crédito (R$)') + '</label><input class="c-valor" inputmode="decimal" value="' + (vr.v ? num(vr.v) : '') + '" data-fonte="' + vr.fonte + '"' + (vr.v ? '' : ' style="outline:2px solid #f0b429"') + '><div class="hint">' + (vr.fonte === 'saque' ? 'valor sacado do extrato' : vr.fonte === 'limite' ? 'limite do cartão (sem valor sacado no extrato)' : 'não consta: informe') + '</div></div>' +
+      '<div><label>Desconto mensal (R$)</label><input class="c-pmt" inputmode="decimal" value="' + (c.valor_parcela ? num(c.valor_parcela) : '') + '"></div>' +
+      '<div><label>Mês da inclusão</label><input class="c-mes" type="month" value="' + (ymOf(c.data_inclusao) || '') + '"' + (ymOf(c.data_inclusao) ? '' : ' style="outline:2px solid #f0b429"') + '></div>' +
+      '</div></div>';
+  }).join('') +
+    (lista.length > 1 ? '<div class="hint">Desmarque o contrato que não deve entrar no cálculo.</div><button type="button" class="btn green" id="calcTodos">Calcular os contratos marcados</button>' : '<button type="button" class="btn green" id="calcTodos">Calcular este contrato</button>') +
+    (extraidos.observacoes ? '<div class="hint">' + esc(extraidos.observacoes) + '</div>' : '');
+  $('contratos').querySelectorAll('.c-valor').forEach(el => el.addEventListener('input', () => { el.dataset.fonte = 'manual'; el.style.outline = ''; }));
+  $('calcTodos').addEventListener('click', calcularExtraidos);
+  $('contratos').querySelectorAll('.c-usar').forEach(el => el.addEventListener('change', () => { el.closest('.ct').classList.toggle('off', !el.checked); calcularExtraidos(); }));
+  $('contratos').querySelectorAll('.c-valor,.c-pmt,.c-mes').forEach(el => el.addEventListener('change', calcularExtraidos));
+}
+
+function calcularExtraidos() {
+  const comuns = (() => { try { return lerComuns(); } catch (e) { upStatus(e.message); return null; } })();
+  if (!comuns) return;
+  const cards = [...$('contratos').querySelectorAll('.ct')].filter(cd => cd.querySelector('.c-usar').checked);
+  if (!cards.length) { upStatus('Marque ao menos um contrato para calcular.'); return; }
+  const items = [], faltas = [];
+  const qtdMod = {}; cards.forEach(cd => { const m = extraidos.contratos[+cd.dataset.i].modalidade; qtdMod[m] = (qtdMod[m] || 0) + 1; });
+  let usouHiscre = 0, hiscreAmbiguo = false;
+  cards.forEach((card, n) => {
+    const c = extraidos.contratos[+card.dataset.i];
+    const vEl = card.querySelector('.c-valor');
+    const P = parseBR(vEl.value), pmt = parseBR(card.querySelector('.c-pmt').value), mes = card.querySelector('.c-mes').value;
+    const nome = 'contrato ' + (c.contrato || n + 1);
+    if (!(P > 0)) faltas.push('o valor do crédito do ' + nome);
+    if (!(pmt > 0)) faltas.push('o desconto mensal do ' + nome);
+    if (!mes) faltas.push('o mês de inclusão do ' + nome);
+    if (!(P > 0 && pmt > 0 && mes)) return;
+    const idx = ymToIdx(mes);
+    const primeiro = ymOf(c.primeiro_desconto) || idxToYM(idx + 1);
+    const ult = comuns.base; // contrato ativo: descontos até o mês do cálculo
+    const hv = descontosHiscre(c.modalidade, qtdMod[c.modalidade]);
+    if (hiscre && hiscre[c.modalidade] && Object.keys(hiscre[c.modalidade]).length && qtdMod[c.modalidade] > 1) hiscreAmbiguo = true;
+    const excecoes = {};
+    if (hv) { usouHiscre++; for (let k = ymToIdx(primeiro); k <= ymToIdx(ult); k++) if (hv[k] !== undefined) excecoes[k] = hv[k]; }
+    const inp = { ...comuns, numContrato: c.contrato || '', banco: c.banco || '', modalidade: c.modalidade, P, fonteValor: vEl.dataset.fonte, pmt, taxa: taxaDoMes(D, idx).taxa, contrato: mes, primeiro, ultimo: ult, excecoes, hiscre: !!hv };
+    items.push({ inp, r: calcular(inp, D) });
+  });
+  const nota = extraidos.ignorados ? ' <span style="color:var(--muted)">Desconsiderei ' + extraidos.ignorados + ' contrato(s) excluído(s), quitado(s) ou que não são cartão.</span>' : '';
+  if (faltas.length) { upStatus('Encontrei ' + extraidos.contratos.length + ' cartão(ões) ativo(s). Falta informar ' + faltas.join(', ') + '.' + nota); return; }
+  const usouLimite = items.some(({ inp }) => inp.fonteValor === 'limite');
+  upStatus((items.length > 1 ? 'Calculei os ' + items.length + ' cartões ativos, cada um com sua data e taxa, e somei os resultados.' : 'Calculei o cartão ativo encontrado.') +
+    (usouHiscre ? ' Usei os descontos mês a mês do HISCRE' + (usouHiscre < items.length ? ' em ' + usouHiscre + ' contrato(s)' : '') + '; nos meses fora do histórico, a parcela atual.' : '') +
+    (hiscreAmbiguo ? ' Há mais de um cartão da mesma modalidade, e o HISCRE não separa por contrato: nesses usei a parcela atual.' : '') +
+    (usouLimite ? ' Como o extrato não traz o valor sacado, usei o <b>limite do cartão</b> como valor do crédito; ajuste nos campos abaixo se tiver o valor exato e toque em calcular de novo.' : '') + nota);
+  preencherForm(items);
+  render(items);
+}
+let modoExtrato = false; // formulário mostra dados do extrato (cálculo contrato a contrato)
+function preencherForm(items) {
+  const uniq = arr => [...new Set(arr.filter(Boolean))];
+  const ins = items.map(x => x.inp);
+  const soma = k => ins.reduce((s, i) => s + i[k], 0);
+  const minYM = k => ins.map(i => i[k]).sort()[0];
+  const mods = uniq(ins.map(i => i.modalidade));
+  $('banco').value = uniq(ins.map(i => i.banco)).join(' / ');
+  $('numContrato').value = uniq(ins.map(i => i.numContrato)).join(' / ');
+  $('modalidade').value = mods.length > 1 ? 'RMC/RCC' : mods[0];
+  $('valor').value = num(soma('P')); $('pmt').value = num(soma('pmt'));
+  taxaManual = false; $('contrato').value = minYM('contrato'); $('contrato').dispatchEvent(new Event('change'));
+  $('primeiro').value = minYM('primeiro'); $('ultimo').value = ins[0].ultimo;
+  fonteValor = ins.every(i => i.fonteValor === 'saque') ? 'saque' : ins.some(i => i.fonteValor === 'limite') ? 'limite' : 'manual';
+  const quadro = '<table class="mini"><thead><tr><th>Contrato</th><th>Modal.</th><th>Contratação</th><th>Valor</th><th>Parcela</th></tr></thead><tbody>' +
+    ins.map(i => '<tr><td>' + esc(i.numContrato || '—') + '<small>' + esc(i.banco || '') + '</small></td><td>' + i.modalidade + '</td><td>' + lbl(i.contrato) + '</td><td>' + num(i.P) + '</td><td>' + num(i.pmt) + '</td></tr>').join('') +
+    (items.length > 1 ? '<tr class="tot"><td>Total</td><td></td><td></td><td>' + num(soma('P')) + '</td><td>' + num(soma('pmt')) + '</td></tr>' : '') + '</tbody></table>';
+  if (items.length > 1) {
+    $('valorHint').textContent = 'Soma dos ' + items.length + ' contratos (' + ins.map(i => brl(i.P)).join(' + ') + ').' + (fonteValor === 'limite' ? ' Limite do cartão, pois o extrato não traz o valor sacado.' : '');
+    $('taxaHint').innerHTML = 'Taxas BACEN de cada contrato: ' + ins.map(i => '<b>' + num(i.taxa) + '%</b> (' + lbl(i.contrato) + ')').join(', ') + '. O cálculo aplica a taxa própria de cada um.';
+    $('modoNota').innerHTML = '<b>Contratos selecionados (' + items.length + ')</b>' + quadro + '<div style="margin-top:6px">Os campos abaixo mostram a soma. O cálculo é feito contrato a contrato, com a data e a taxa de cada um, e os resultados são somados. Se alterar algum campo aqui, o cálculo passa a considerar só os valores digitados.</div>';
+  } else {
+    $('valorHint').textContent = fonteValor === 'limite' ? 'Limite do cartão (o extrato não traz o valor sacado).' : 'Valor sacado lido do extrato.';
+    $('modoNota').innerHTML = '<b>Contrato selecionado</b>' + quadro;
+  }
+  $('modoNota').style.display = 'block';
+  if (items.length === 1) $('excecoes').value = Object.entries(ins[0].excecoes || {}).filter(([k, v]) => Math.abs(v - ins[0].pmt) > 0.004).map(([k, v]) => idxToLabel(+k) + ' = ' + num(v)).join('\n');
+  modoExtrato = items.length > 1;
+}
+['banco', 'numContrato', 'modalidade', 'valor', 'pmt', 'contrato', 'primeiro', 'ultimo', 'taxa', 'excecoes'].forEach(id =>
+  $(id).addEventListener('input', () => { if (modoExtrato) { modoExtrato = false; $('modoNota').style.display = 'none'; } }));
+$('lerColado').addEventListener('click', () => { const v = $('colar').value.trim(); if (v.length < 40) { upStatus('Cole o texto completo do extrato.'); return; } processarArquivos([], v); });
+['arq', 'arq2'].forEach(id => $(id).addEventListener('change', e => { const fs = [...e.target.files]; if (fs.length) processarArquivos(fs); setTimeout(() => { e.target.value = ''; }, 0); }));
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('on'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files.length) processarArquivos([...e.dataTransfer.files]); });
+
+</script>
+</body>
+</html>
