@@ -572,7 +572,7 @@ function render(items) {
     const indev = r.rows.filter(x => x.situacao === 'indébito' && x.desconto > 0).length;
     const vencer = r.previsao && r.previsao.rows ? r.previsao.nRestantes : 0;
     const tot = Math.max(1, pagas + indev + vencer);
-    const seg = (n, cls, txt) => n ? '<span class="' + cls + '" style="flex:' + n + '" title="' + txt + '">' + (n / tot > .18 ? txt : '') + '</span>' : '';
+    const seg = (n, cls, txt) => n ? '<span class="' + cls + '" style="flex:' + n + '" title="' + txt + '">' + (n / tot > .26 ? txt : '') + '</span>' : '';
     const fimLbl = vencer ? idxToLabel(r.previsao.mes) : lbl(inp.ultimo);
     const meio = r.quit !== null ? 'quitado ' + idxToLabel(r.quit) : 'hoje ' + lbl(inp.ultimo);
     return '<div class="row"><div class="h"><b>' + esc(inp.modalidade + (inp.numContrato ? ' · ' + inp.numContrato : '') + (inp.banco ? ' · ' + inp.banco : '')) + '</b><span>' + brl(inp.P) + ' · ' + num(inp.taxa) + '% a.m.</span></div>' +
