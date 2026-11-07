@@ -383,6 +383,13 @@ if (typeof module !== 'undefined') module.exports = { calcular, taxaDoMes, ymToI
 
 
 // ===== utilidades de UI =====
+// fora do Claude não há leitura automática: esconde o envio de arquivos
+if (!(window.claude && window.claude.use)) {
+  document.getElementById('upCard').style.display = 'none';
+  const f = document.getElementById('f');
+  f.insertAdjacentHTML('afterbegin', '<div class="aviso" style="margin:-4px 0 14px;background:#eef4fb;color:#1f4f82">Preencha os dados do contrato conforme o extrato de empréstimos do INSS e toque em <b>Calcular</b>.</div>');
+  document.querySelectorAll('.card h2 .n').forEach((el, i) => { if (i > 0) el.textContent = String(i); });
+}
 const $ = id => document.getElementById(id);
 const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = (v, d = 2) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
