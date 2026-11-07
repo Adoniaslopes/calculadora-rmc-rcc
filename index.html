@@ -272,7 +272,7 @@ footer b{color:var(--ink2)}
     <ol class="method" id="metodo"></ol>
   </div>
 </section>
-<footer><b>Versão 07/11/2026 · 18h50</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
+<footer><b>Versão 07/11/2026 · 19h05</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
 </main>
 <div class="toast" id="toast"></div>
 
@@ -724,11 +724,13 @@ async function lerPdf(file) {
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc = await page.getTextContent();
-    const linhas = {};
-    tc.items.forEach(it => { const y = Math.round(it.transform[5]); (linhas[y] = linhas[y] || []).push(it); });
-    Object.keys(linhas).map(Number).sort((a, b) => b - a).forEach(y => {
-      texto += linhas[y].sort((a, b) => a.transform[4] - b.transform[4]).map(i => i.str).join('  ').replace(/\s{3,}/g, '  ') + '\n';
-    });
+    // posições já convertidas para a página como ela aparece (corrige páginas giradas/paisagem)
+    const vp0 = page.getViewport({ scale: 1 });
+    const itens = tc.items.filter(it => it.str && it.str.trim()).map(it => { const m = pdfjs.Util.transform(vp0.transform, it.transform); return { s: it.str, x: m[4], y: m[5] }; });
+    itens.sort((a, b) => a.y - b.y || a.x - b.x);
+    const grupos = [];
+    itens.forEach(it => { const g = grupos[grupos.length - 1]; if (g && Math.abs(g.y - it.y) <= 3) g.itens.push(it); else grupos.push({ y: it.y, itens: [it] }); });
+    grupos.forEach(g => { texto += g.itens.sort((a, b) => a.x - b.x).map(i => i.s).join('  ').replace(/\s{3,}/g, '  ') + '\n'; });
     texto += '\n--- página ' + p + ' ---\n';
     if (p <= 4) {
       const vp = page.getViewport({ scale: 1.6 });
@@ -793,6 +795,11 @@ async function processarExtrato(texto, imgs) {
   const sample = sampleP ? await sampleP : null;
   try {
     textoExtrato = texto;
+    // primeiro, a leitura por regras do formato do INSS (rápida, gratuita e igual em qualquer aparelho)
+    if (texto.replace(/\s|-|página|\d/g, '').length >= 100) {
+      const local = lerExtratoLocal(texto);
+      if (local.contratos.length || !sample) return finalizarExtrato(local);
+    }
     if (!sample) {
       if (texto.replace(/\s|-|página|\d/g, '').length < 100) { upStatus('Este arquivo é uma imagem ou PDF escaneado. Envie o PDF baixado do Meu INSS (com texto selecionável).'); return; }
       upStatus('<span class="spin"></span>Identificando os cartões RMC/RCC ativos…');
@@ -847,40 +854,49 @@ const RX_DATA = /(\d{2})\/(\d{2})\/(\d{4})/g;
 const RX_VALOR = /(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/g;
 const valorBR = s => parseFloat(s.replace(/\./g, '').replace(',', '.'));
 function lerExtratoLocal(texto) {
-  const linhas = texto.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+  const RXD = /(\d{2})\/(\d{2})\/(\d{2,4})(?!\d)/;
+  const iso = m => { let y = +m[3]; if (y < 100) y += 2000; return y + '-' + m[2] + '-' + m[1]; };
+  const RXSIT = /^(ativ[oa]|exclu[íi]d[oa]|suspens[oa]|encerrad[oa]|inativ[oa]|cancelad[oa]|quitad[oa]|liquidad[oa])$/i;
   let sec = null, beneficiario = null; const contratos = [];
   linhas.forEach((l, i) => {
     const up = l.toUpperCase();
-    if (!beneficiario) { const m = l.match(/(?:benefici[áa]rio|nome)\s*:?\s*([A-ZÀ-Ú][A-ZÀ-Ú .'-]{4,60}?)(?:\s{2,}|\s+benef|\s+cpf|\s+nb|$)/i); if (m && !/empr|cart|banco/i.test(m[1])) beneficiario = m[1].trim(); }
-    // cabeçalho de colunas (Contrato, Situação, Limite do cartão...) não muda a seção
-    if (/CONTRATO/.test(up) && /SITUA|INCLUS|BANCO/.test(up) && !/\d{2}\/\d{2}\/\d{4}/.test(l)) return;
-    // títulos de seção (linhas sem data)
-    if (!/\d{2}\/\d{2}\/\d{4}/.test(l)) {
-      if (/CART[ÃA]O/.test(up) && /(RCC|BENEF[ÍI]CIO|CONSIGNADO DE BENEF)/.test(up)) sec = 'RCC';
-      else if (/CART[ÃA]O|RMC|RESERVA DE MARGEM/.test(up)) sec = 'RMC';
-      else if (/EMPR[ÉE]STIMO|CONSIGNA[ÇC][ÃA]O|REFINANC|PORTABILIDADE/.test(up)) sec = 'EMP';
+    // nome do titular: linha logo após o título "HISTÓRICO DE EMPRÉSTIMO CONSIGNADO", ou após "Beneficiário:"
+    if (!beneficiario) {
+      if (/EMPR[ÉE]STIMO[S]? CONSIGNADO/.test(up) && linhas[i + 1] && /^[A-ZÀ-Ú][A-ZÀ-Ú .'-]{5,60}$/.test(linhas[i + 1]) && !/BENEF|INSTITUTO/.test(linhas[i + 1].toUpperCase())) beneficiario = linhas[i + 1];
+      const m = l.match(/(?:benefici[áa]rio|titular)\s*:\s*([A-ZÀ-Ú][A-ZÀ-Ú .'-]{4,60}?)(?:\s{2,}|\s+benef|\s+cpf|\s+nb|$)/i); if (!beneficiario && m) beneficiario = m[1].trim();
+    }
+    const temData = RXD.test(l);
+    const contratoTok = (l.replace(/\d{2}\/\d{2}\/\d{2,4}/g, ' ').replace(/R\$\s*[\d.,]+/g, ' ').match(/\b(\d{6,}(?:[-.\/]\d+)*)\b/) || [])[1];
+    // títulos de seção
+    if (!(temData && contratoTok)) {
+      const ms = up.match(/CART[ÃA]O[^-]*-\s*(RMC|RCC)\b/);
+      if (ms) sec = ms[1];
+      else if (/CART[ÃA]O CONSIGNADO DE BENEF|\bRCC\b/.test(up) && /CART[ÃA]O/.test(up) && !/MARGEM|VALORES/.test(up)) sec = 'RCC';
+      else if (/^CART[ÃA]O DE CR[ÉE]DITO$|RESERVA DE MARGEM CONSIGN/.test(up)) sec = 'RMC';
+      else if (/^EMPR[ÉE]STIMOS? BANC|^EMPR[ÉE]STIMOS?$|REFINANCIAMENTO|PORTABILIDADE/.test(up) && !/QUANTITATIVO|RESERVADOS/.test(up)) sec = 'EMP';
       return;
     }
-    if (sec !== 'RMC' && sec !== 'RCC') return;
-    // valores da própria linha; se a linha quebrou, completa com as seguintes até a próxima linha com data
-    let bloco = l;
-    for (let j = i + 1; j <= i + 2 && [...bloco.matchAll(RX_VALOR)].length < 2 && linhas[j] && !/\d{2}\/\d{2}\/\d{4}/.test(linhas[j]); j++) bloco += ' ' + linhas[j];
-    const datas = [...l.matchAll(RX_DATA)].map(m => m[3] + '-' + m[2] + '-' + m[1]);
-    const valores = [...bloco.matchAll(RX_VALOR)].map(m => valorBR(m[1])).filter(v => v > 0);
-    const sit = (l.match(/\b(ativ[oa]|exclu[íi]d[oa]|suspens[oa]|encerrad[oa]|inativ[oa]|cancelad[oa]|quitad[oa]|liquidad[oa])\b/i) || [])[1] || '';
-    const semDatas = l.replace(RX_DATA, ' ').replace(RX_VALOR, ' ');
-    const contrato = (semDatas.match(/\b([A-Z0-9]*\d[A-Z0-9\-\/.]{4,})\b/i) || [])[1] || '';
-    let banco = (l.match(/\b\d{3}\s*-\s*([A-ZÀ-Ú][A-ZÀ-Ú0-9 .&\/-]{2,50}?)(?=\s+(?:ativ|exclu|suspens|encerr|inativ|cancel|\d{2}\/)|$)/i) || [])[1] || (l.match(/\b(BANCO\s+[A-ZÀ-Ú0-9 .&\/-]{2,40}?)(?=\s+(?:ativ|exclu|suspens|encerr|inativ|cancel|\d)|$)/i) || [])[1] || '';
-    banco = banco.replace(/\s+(S\.?A\.?)$/i, ' S.A.').trim();
-    const ehAtivoTxt = /^ativ[oa]$/i.test(sit);
+    // linha de contrato: modalidade pela seção ou pelo próprio texto do tipo ("Cartão (RMC)" / "Consignado (RCC)")
+    const viz = [linhas[i - 1] || '', l, linhas[i + 1] || ''].join(' ').toUpperCase();
+    let mod = /\(RCC\)|CART[ÃA]O CONSIGNADO DE BENEF/.test(viz) ? 'RCC' : /\(RMC\)|RESERVA DE MARGEM PARA CART/.test(viz) ? 'RMC' : sec;
+    if (mod !== 'RMC' && mod !== 'RCC') return;
+    const partes = l.split(/\s{2,}/).map(s => s.trim());
+    const pBanco = partes.find(p => /^\d{3}\s*-\s*\S/.test(p)) || (l.match(/\b\d{3}\s*-\s*[A-ZÀ-Ú][A-ZÀ-Ú0-9 .&\/]+?(?=\s{2,}|\s+(?:ativ|exclu|suspens|encerr|inativ|cancel)|$)/i) || [])[0] || '';
+    const banco = pBanco.replace(/^\d{3}\s*-\s*/, '').trim();
+    const sit = partes.find(p => RXSIT.test(p)) || (l.match(/\b(ativ[oa]|exclu[íi]d[oa]|suspens[oa]|encerrad[oa]|inativ[oa]|cancelad[oa]|quitad[oa]|liquidad[oa])\b/i) || [])[1] || '';
+    const datas = [...l.matchAll(new RegExp(RXD.source, 'g'))].map(iso);
+    const valores = [...l.matchAll(RX_VALOR)].map(m => valorBR(m[1])).filter(v => v > 0);
+    const ativo = /^ativ[oa]$/i.test(sit);
     contratos.push({
-      ativo: ehAtivoTxt, secao: sec === 'RMC' ? 'Cartão de crédito – RMC' : 'Cartão consignado de benefício – RCC', modalidade: sec,
-      banco, contrato, situacao: sit ? sit.charAt(0).toUpperCase() + sit.slice(1).toLowerCase() : '',
-      data_inclusao: datas[0] || null, data_exclusao: !ehAtivoTxt && datas[1] ? datas[1] : null,
+      ativo, secao: mod === 'RMC' ? 'Cartão de crédito – RMC' : 'Cartão de crédito – RCC', modalidade: mod,
+      banco: banco ? banco.replace(/\b([A-ZÀ-Ú])([A-ZÀ-Ú]+)\b/g, (w, a, b) => a + b.toLowerCase()).replace(/\bSa\b/, 'S.A.') : '', contrato: contratoTok,
+      situacao: sit ? sit.charAt(0).toUpperCase() + sit.slice(1).toLowerCase() : '',
+      data_inclusao: datas[0] || null, data_exclusao: !ativo && datas[1] ? datas[1] : null,
       valor_parcela: valores.length ? Math.min(...valores) : null, limite_cartao: valores.length > 1 ? Math.max(...valores) : null, valor_emprestado: null
     });
   });
-  return { beneficiario, contratos, observacoes: contratos.length ? 'Leitura automática pelo formato do extrato do INSS: confira banco, contrato, data e valores.' : '' };
+  return { beneficiario: beneficiario ? beneficiario.replace(/\b([A-ZÀ-Ú])([A-ZÀ-Ú]+)\b/g, (w, a, b) => a + b.toLowerCase()).replace(/\b(De|Da|Do|Dos|Das|E)\b/g, s => s.toLowerCase()) : null, contratos, observacoes: contratos.length ? 'Leitura automática pelo formato do extrato do INSS: confira banco, contrato, data e valores.' : '' };
 }
 function lerHiscreLocal(texto) {
   const h = { RMC: {}, RCC: {}, n: 0 }; let comp = null;
