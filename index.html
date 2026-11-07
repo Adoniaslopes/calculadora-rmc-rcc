@@ -137,6 +137,7 @@ footer b{color:var(--ink2)}
 .ctgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px 10px;margin-top:8px}
 .ctgrid input{min-height:42px;padding:8px 10px}
 #calcTodos{width:100%;margin-top:4px}
+.fotoBtn{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;min-height:46px;border-radius:12px;background:#eef2f8;color:var(--ink2);font-weight:700;font-size:14px;cursor:pointer}
 .chk{display:flex;align-items:center;gap:9px;font-weight:800;color:var(--ink);margin:0;cursor:pointer}
 .chk input{width:20px;height:20px;min-height:0;accent-color:var(--ink)}
 .miss{outline:2px solid #f0b429!important;background:#fffaf0!important}
@@ -166,23 +167,19 @@ footer b{color:var(--ink2)}
 <div class="card" id="upCard">
   <h2><span class="n">1</span>Envie o extrato do INSS</h2>
   <div class="drop" id="drop">
-    <input type="file" id="arq" accept=".pdf,application/pdf,image/*" aria-label="Enviar extrato">
-    <b>Toque aqui para enviar o extrato</b>
-    <div class="sub">PDF do Meu INSS ou foto/print legível. A plataforma lê os cartões RMC/RCC e preenche o cálculo.</div>
+    <input type="file" id="arq" accept="application/pdf,image/*" multiple aria-label="Enviar documentos do INSS">
+    <b>Toque aqui para enviar os documentos do INSS</b>
+    <div class="sub">Extrato de empréstimos e, se tiver, o Histórico de Créditos (HISCRE). Pode enviar os dois juntos: a calculadora identifica cada um.</div>
   </div>
-  <div class="alt">Se o toque acima não abrir seus arquivos, use este botão:<br><input type="file" id="arq2" accept=".pdf,application/pdf,image/*"></div>
-  <details id="colarBox"><summary>Não abriu? Cole o texto do extrato</summary>
+  <label class="fotoBtn" for="arqFoto">Enviar print ou foto do extrato</label>
+  <input type="file" id="arqFoto" accept="image/*" multiple hidden>
+  <div class="status" id="hStatus"></div>
+  <details id="colarBox"><summary>O envio não abriu? Cole o texto do documento</summary>
     <div style="margin-top:10px">
-      <textarea id="colar" style="font-family:Inter,sans-serif;min-height:120px" placeholder="Abra o PDF do extrato, selecione todo o texto, copie e cole aqui."></textarea>
+      <textarea id="colar" style="font-family:var(--body);min-height:120px" placeholder="Abra o PDF, selecione todo o texto, copie e cole aqui."></textarea>
       <button type="button" class="btn ghost" id="lerColado" style="margin-top:8px;width:100%">Ler texto colado</button>
     </div>
   </details>
-  <div class="hisc">
-    <b>Opcional: Histórico de Créditos (HISCRE)</b>
-    <div class="sub">Traz o valor descontado em cada mês. Com ele, o cálculo usa os descontos reais em vez de repetir a parcela atual.</div>
-    <input type="file" id="arqH" accept=".pdf,application/pdf,image/*">
-    <div class="status" id="hStatus"></div>
-  </div>
   <div class="status" id="upStatus"></div>
   <div class="contratos" id="contratos"></div>
   <div class="or">ou preencha manualmente</div>
@@ -275,7 +272,7 @@ footer b{color:var(--ink2)}
     <ol class="method" id="metodo"></ol>
   </div>
 </section>
-<footer><b>Versão 07/11/2026 · 12h55</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
+<footer><b>Versão 07/11/2026 · 18h50</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
 </main>
 <div class="toast" id="toast"></div>
 
@@ -383,14 +380,8 @@ if (typeof module !== 'undefined') module.exports = { calcular, taxaDoMes, ymToI
 
 
 // ===== utilidades de UI =====
-// fora do Claude não há leitura automática: esconde o envio de arquivos
-if (!(window.claude && window.claude.use)) {
-  document.getElementById('upCard').style.display = 'none';
-  const f = document.getElementById('f');
-  f.insertAdjacentHTML('afterbegin', '<div class="aviso" style="margin:-4px 0 14px;background:#eef4fb;color:#1f4f82">Preencha os dados do contrato conforme o extrato de empréstimos do INSS e toque em <b>Calcular</b>.</div>');
-  document.querySelectorAll('.card h2 .n').forEach((el, i) => { if (i > 0) el.textContent = String(i); });
-}
 const $ = id => document.getElementById(id);
+if (!(window.claude && window.claude.use)) { const fb = document.querySelector('.fotoBtn'); if (fb) fb.style.display = 'none'; }
 const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = (v, d = 2) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const parseBR = s => { if (typeof s === 'number') return s; s = String(s || '').trim().replace(/[R$\s]/g, ''); if (!s) return NaN; if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); return parseFloat(s); };
@@ -797,19 +788,16 @@ function dataNoTexto(contrato) {
 }
 const valorRef = c => (typeof c.valor_emprestado === 'number' && c.valor_emprestado > 0) ? { v: c.valor_emprestado, fonte: 'saque' } : (typeof c.limite_cartao === 'number' && c.limite_cartao > 0) ? { v: c.limite_cartao, fonte: 'limite' } : { v: null, fonte: 'manual' };
 
-async function processarArquivos(files, textoColado) {
+async function processarExtrato(texto, imgs) {
   $('contratos').innerHTML = '';
   const sample = sampleP ? await sampleP : null;
-  if (!sample) { upStatus('A leitura automática só funciona com a calculadora aberta no Claude. Preencha os campos abaixo manualmente.'); return; }
   try {
-    upStatus('<span class="spin"></span>Lendo o arquivo…');
-    let texto = textoColado || '', imgs = [];
-    textoExtrato = '';
-    for (const f of files) {
-      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) { const r = await lerPdf(f); texto += r.texto; imgs.push(...r.imgs); }
-      else if (/^image\//.test(f.type)) imgs.push(f);
-    }
     textoExtrato = texto;
+    if (!sample) {
+      if (texto.replace(/\s|-|página|\d/g, '').length < 100) { upStatus('Este arquivo é uma imagem ou PDF escaneado. Envie o PDF baixado do Meu INSS (com texto selecionável).'); return; }
+      upStatus('<span class="spin"></span>Identificando os cartões RMC/RCC ativos…');
+      return finalizarExtrato(lerExtratoLocal(texto));
+    }
     const temTexto = texto.replace(/\s|-|página|\d/g, '').length > 150;
     const lim = await sample.limits().catch(() => null);
     const podeImg = !!(lim && lim.images);
@@ -819,6 +807,11 @@ async function processarArquivos(files, textoColado) {
     const opts = {};
     if (!temTexto) opts.images = imgs.slice(0, lim.images.maxCount);
     const j = await sample.json(prompt, opts);
+    return finalizarExtrato(j);
+  } catch (e) { tratarErroExtrato(e); }
+}
+function finalizarExtrato(j) {
+  try {
     const todos = (j && Array.isArray(j.contratos)) ? j.contratos.filter(c => c && (c.modalidade || c.banco)) : [];
     // só entra: cartão RMC/RCC, situação expressamente ativa, sem data de exclusão, fora da seção de empréstimos
     const sit = c => String(c.situacao || '').toLowerCase();
@@ -832,7 +825,10 @@ async function processarArquivos(files, textoColado) {
     if (!lista.length) { upStatus('Não encontrei cartão RMC ou RCC <b>ativo</b> nesse extrato' + (ignorados ? ' (' + ignorados + ' contrato(s) excluído(s), quitado(s) ou de outra modalidade foram desconsiderados)' : '') + '. Confira o extrato ou preencha manualmente.'); return; }
     mostrarContratos();
     calcularExtraidos();
-  } catch (e) {
+  } catch (e) { tratarErroExtrato(e); }
+}
+function tratarErroExtrato(e) {
+  {
     const msg = {
       sem_conteudo: 'Não consegui ler o conteúdo do arquivo. Envie o PDF baixado do Meu INSS ou uma foto nítida.',
       not_granted: 'A leitura automática não foi autorizada. Preencha os campos manualmente.',
@@ -845,6 +841,64 @@ async function processarArquivos(files, textoColado) {
   }
 }
 
+
+// ===== Leitura local (sem Claude): regras para o extrato e o HISCRE do INSS =====
+const RX_DATA = /(\d{2})\/(\d{2})\/(\d{4})/g;
+const RX_VALOR = /(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/g;
+const valorBR = s => parseFloat(s.replace(/\./g, '').replace(',', '.'));
+function lerExtratoLocal(texto) {
+  const linhas = texto.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  let sec = null, beneficiario = null; const contratos = [];
+  linhas.forEach((l, i) => {
+    const up = l.toUpperCase();
+    if (!beneficiario) { const m = l.match(/(?:benefici[áa]rio|nome)\s*:?\s*([A-ZÀ-Ú][A-ZÀ-Ú .'-]{4,60}?)(?:\s{2,}|\s+benef|\s+cpf|\s+nb|$)/i); if (m && !/empr|cart|banco/i.test(m[1])) beneficiario = m[1].trim(); }
+    // cabeçalho de colunas (Contrato, Situação, Limite do cartão...) não muda a seção
+    if (/CONTRATO/.test(up) && /SITUA|INCLUS|BANCO/.test(up) && !/\d{2}\/\d{2}\/\d{4}/.test(l)) return;
+    // títulos de seção (linhas sem data)
+    if (!/\d{2}\/\d{2}\/\d{4}/.test(l)) {
+      if (/CART[ÃA]O/.test(up) && /(RCC|BENEF[ÍI]CIO|CONSIGNADO DE BENEF)/.test(up)) sec = 'RCC';
+      else if (/CART[ÃA]O|RMC|RESERVA DE MARGEM/.test(up)) sec = 'RMC';
+      else if (/EMPR[ÉE]STIMO|CONSIGNA[ÇC][ÃA]O|REFINANC|PORTABILIDADE/.test(up)) sec = 'EMP';
+      return;
+    }
+    if (sec !== 'RMC' && sec !== 'RCC') return;
+    // valores da própria linha; se a linha quebrou, completa com as seguintes até a próxima linha com data
+    let bloco = l;
+    for (let j = i + 1; j <= i + 2 && [...bloco.matchAll(RX_VALOR)].length < 2 && linhas[j] && !/\d{2}\/\d{2}\/\d{4}/.test(linhas[j]); j++) bloco += ' ' + linhas[j];
+    const datas = [...l.matchAll(RX_DATA)].map(m => m[3] + '-' + m[2] + '-' + m[1]);
+    const valores = [...bloco.matchAll(RX_VALOR)].map(m => valorBR(m[1])).filter(v => v > 0);
+    const sit = (l.match(/\b(ativ[oa]|exclu[íi]d[oa]|suspens[oa]|encerrad[oa]|inativ[oa]|cancelad[oa]|quitad[oa]|liquidad[oa])\b/i) || [])[1] || '';
+    const semDatas = l.replace(RX_DATA, ' ').replace(RX_VALOR, ' ');
+    const contrato = (semDatas.match(/\b([A-Z0-9]*\d[A-Z0-9\-\/.]{4,})\b/i) || [])[1] || '';
+    let banco = (l.match(/\b\d{3}\s*-\s*([A-ZÀ-Ú][A-ZÀ-Ú0-9 .&\/-]{2,50}?)(?=\s+(?:ativ|exclu|suspens|encerr|inativ|cancel|\d{2}\/)|$)/i) || [])[1] || (l.match(/\b(BANCO\s+[A-ZÀ-Ú0-9 .&\/-]{2,40}?)(?=\s+(?:ativ|exclu|suspens|encerr|inativ|cancel|\d)|$)/i) || [])[1] || '';
+    banco = banco.replace(/\s+(S\.?A\.?)$/i, ' S.A.').trim();
+    const ehAtivoTxt = /^ativ[oa]$/i.test(sit);
+    contratos.push({
+      ativo: ehAtivoTxt, secao: sec === 'RMC' ? 'Cartão de crédito – RMC' : 'Cartão consignado de benefício – RCC', modalidade: sec,
+      banco, contrato, situacao: sit ? sit.charAt(0).toUpperCase() + sit.slice(1).toLowerCase() : '',
+      data_inclusao: datas[0] || null, data_exclusao: !ehAtivoTxt && datas[1] ? datas[1] : null,
+      valor_parcela: valores.length ? Math.min(...valores) : null, limite_cartao: valores.length > 1 ? Math.max(...valores) : null, valor_emprestado: null
+    });
+  });
+  return { beneficiario, contratos, observacoes: contratos.length ? 'Leitura automática pelo formato do extrato do INSS: confira banco, contrato, data e valores.' : '' };
+}
+function lerHiscreLocal(texto) {
+  const h = { RMC: {}, RCC: {}, n: 0 }; let comp = null;
+  texto.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).forEach(l => {
+    const mc = l.match(/compet[êe]ncia\s*:?\s*(\d{2})\/(\d{4})/i) || l.match(/^(\d{2})\/(\d{4})\b/);
+    if (mc) comp = (+mc[2]) * 12 + (+mc[1] - 1);
+    const up = l.toUpperCase();
+    if (!/(RMC|RESERVA DE MARGEM|CART[ÃA]O DE CR[ÉE]DITO|CART[ÃA]O CONSIGNADO|\bRCC\b)/.test(up)) return;
+    if (/EMPR[ÉE]STIMO BANC|CONSIGNA[ÇC][ÃA]O EMPR/.test(up)) return;
+    const vs = [...l.matchAll(RX_VALOR)].map(m => valorBR(m[1])).filter(v => v > 0);
+    const dl = l.match(/\b(\d{2})\/(\d{4})\b/); const k = dl ? (+dl[2]) * 12 + (+dl[1] - 1) : comp;
+    if (k === null || !vs.length) return;
+    const mod = /\bRCC\b|CONSIGNADO DE BENEF|CART[ÃA]O CONSIGNADO/.test(up) && !/RMC|RESERVA DE MARGEM/.test(up) ? 'RCC' : 'RMC';
+    h[mod][k] = (h[mod][k] || 0) + vs[vs.length - 1]; h.n++;
+  });
+  return h;
+}
+
 // ===== HISCRE: descontos mês a mês =====
 let hiscre = null; // { RMC: {idx: valor}, RCC: {idx: valor}, n }
 const hStatus = (html) => { const s = $('hStatus'); s.innerHTML = html; s.classList.add('on'); };
@@ -855,13 +909,13 @@ Extraia TODOS os descontos de CARTÃO CONSIGNADO, mês a mês:
 NÃO inclua empréstimos consignados comuns (ex.: "CONSIGNACAO EMPRESTIMO BANCARIO"), imposto, pensão ou outros descontos.
 Para cada desconto: competencia ("AAAA-MM", a competência do pagamento), modalidade ("RMC" ou "RCC"), rubrica (texto como aparece), valor (número, sem R$).
 Não invente valores. Responda só com JSON: {"lancamentos":[{"competencia":"2024-01","modalidade":"RMC","rubrica":"","valor":110.0}]}`;
-async function processarHiscre(file) {
+async function processarHiscre(texto, imgs) {
   const sample = sampleP ? await sampleP : null;
-  if (!sample) { hStatus('A leitura automática só funciona com a calculadora aberta no Claude.'); return; }
+  if (!sample) {
+    if (texto.replace(/\s|-|página|\d/g, '').length < 100) { hStatus('O histórico enviado é imagem ou PDF escaneado. Envie o PDF baixado do Meu INSS.'); return; }
+    return aplicarHiscre(lerHiscreLocal(texto));
+  }
   try {
-    hStatus('<span class="spin"></span>Lendo o histórico de créditos…');
-    let texto = '', imgs = [];
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) { const r = await lerPdf(file); texto = r.texto; imgs = r.imgs; } else imgs = [file];
     const temTexto = texto.replace(/\s|-|página|\d/g, '').length > 150;
     const lim = await sample.limits().catch(() => null);
     if (!temTexto && !(lim && lim.images)) throw { code: 'sem_conteudo' };
@@ -872,6 +926,13 @@ async function processarHiscre(file) {
       const mod = String(l.modalidade || '').trim().toUpperCase(), ym = ymOf(l.competencia), v = parseBR(l.valor);
       if ((mod === 'RMC' || mod === 'RCC') && ym && v > 0) { const k = ymToIdx(ym); h[mod][k] = (h[mod][k] || 0) + v; h.n++; }
     });
+    aplicarHiscre(h);
+  } catch (e) {
+    hStatus({ sem_conteudo: 'Não consegui ler o arquivo. Envie o PDF do Meu INSS.', not_granted: 'A leitura não foi autorizada.', rate_limited: 'Muitas leituras seguidas. Aguarde e tente de novo.', invalid_json: 'Não consegui organizar os dados. Tente de novo.' }[e && e.code] || ('Falha ao ler o histórico' + (e && e.message ? ': ' + e.message : '') + '.'));
+  }
+}
+function aplicarHiscre(h) {
+  {
     if (!h.n) { hStatus('Não encontrei descontos de cartão RMC/RCC nesse histórico. Confira se é o HISCRE do benefício certo.'); return; }
     hiscre = h;
     const resumo = ['RMC', 'RCC'].filter(m => Object.keys(h[m]).length).map(m => {
@@ -880,11 +941,8 @@ async function processarHiscre(file) {
     }).join(' · ');
     hStatus('Histórico lido. ' + resumo + '.' + (extraidos ? ' Recalculei com os valores mês a mês.' : ' Envie também o extrato de empréstimos para calcular.'));
     if (extraidos && $('contratos').querySelector('.ct')) calcularExtraidos();
-  } catch (e) {
-    hStatus({ sem_conteudo: 'Não consegui ler o arquivo. Envie o PDF do Meu INSS.', not_granted: 'A leitura não foi autorizada.', rate_limited: 'Muitas leituras seguidas. Aguarde e tente de novo.', invalid_json: 'Não consegui organizar os dados. Tente de novo.' }[e && e.code] || ('Falha ao ler o histórico' + (e && e.message ? ': ' + e.message : '') + '.'));
   }
 }
-$('arqH').addEventListener('change', e => { const f = e.target.files[0]; if (f) processarHiscre(f); setTimeout(() => { e.target.value = ''; }, 0); });
 // valores do HISCRE para um contrato: só quando há um único contrato daquela modalidade entre os marcados
 function descontosHiscre(mod, qtdMesmaModalidade) {
   if (!hiscre || !hiscre[mod] || !Object.keys(hiscre[mod]).length || qtdMesmaModalidade > 1) return null;
@@ -980,8 +1038,27 @@ function preencherForm(items) {
 }
 ['banco', 'numContrato', 'modalidade', 'valor', 'pmt', 'contrato', 'primeiro', 'ultimo', 'taxa', 'excecoes'].forEach(id =>
   $(id).addEventListener('input', () => { if (modoExtrato) { modoExtrato = false; $('modoNota').style.display = 'none'; } }));
-$('lerColado').addEventListener('click', () => { const v = $('colar').value.trim(); if (v.length < 40) { upStatus('Cole o texto completo do extrato.'); return; } processarArquivos([], v); });
-['arq', 'arq2'].forEach(id => $(id).addEventListener('change', e => { const fs = [...e.target.files]; if (fs.length) processarArquivos(fs); setTimeout(() => { e.target.value = ''; }, 0); }));
+// um único envio: identifica extrato de empréstimos e HISCRE pelo conteúdo
+const ehHiscre = (texto, nome) => /hist[óo]rico\s+de\s+cr[ée]ditos|hiscre|relação\s+de\s+créditos/i.test(texto.slice(0, 4000)) || /hiscre|hist[oó]rico.*cr[eé]dito/i.test(nome || '');
+async function processarArquivos(files, textoColado) {
+  const docs = [];
+  try {
+    upStatus('<span class="spin"></span>Lendo ' + (textoColado ? 'o texto colado' : files.length > 1 ? 'os ' + files.length + ' arquivos' : 'o arquivo') + '…');
+    if (textoColado) docs.push({ texto: textoColado, imgs: [], nome: '' });
+    for (const f of files) {
+      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) { const r = await lerPdf(f); docs.push({ texto: r.texto, imgs: r.imgs, nome: f.name }); }
+      else if (/^image\//.test(f.type)) docs.push({ texto: '', imgs: [f], nome: f.name });
+      else { upStatus('O arquivo "' + esc(f.name) + '" não é PDF nem imagem. Envie o PDF baixado do Meu INSS.'); return; }
+    }
+  } catch (e) { upStatus('Não consegui abrir o arquivo' + (e && e.message ? ': ' + e.message : '') + '. Envie o PDF baixado do Meu INSS.'); return; }
+  const hisc = docs.filter(d => ehHiscre(d.texto, d.nome)), ext = docs.filter(d => !ehHiscre(d.texto, d.nome));
+  if (ext.length) await processarExtrato(ext.map(d => d.texto).join('\n'), ext.flatMap(d => d.imgs));
+  else if (!extraidos) upStatus('Recebi o Histórico de Créditos. Envie também o extrato de empréstimos para identificar os contratos.');
+  if (hisc.length) { hStatus('<span class="spin"></span>Lendo o histórico de créditos (HISCRE)…'); await processarHiscre(hisc.map(d => d.texto).join('\n'), hisc.flatMap(d => d.imgs)); }
+}
+$('lerColado').addEventListener('click', () => { const v = $('colar').value.trim(); if (v.length < 40) { upStatus('Cole o texto completo do documento.'); return; } processarArquivos([], v); });
+$('arqFoto').addEventListener('change', e => { const fs = [...e.target.files]; if (fs.length) processarArquivos(fs); setTimeout(() => { e.target.value = ''; }, 0); });
+$('arq').addEventListener('change', e => { const fs = [...e.target.files]; if (fs.length) processarArquivos(fs); setTimeout(() => { e.target.value = ''; }, 0); });
 const drop = $('drop');
 ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('on'); }));
