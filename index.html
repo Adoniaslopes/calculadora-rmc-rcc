@@ -194,8 +194,8 @@ footer b{color:var(--ink2)}
     <div><label for="numContrato">Nº do contrato</label><input id="numContrato" placeholder="Opcional"></div>
     <div><label for="modalidade">Modalidade</label>
       <select id="modalidade"><option value="RMC">RMC – Reserva de Margem Consignável</option><option value="RCC">RCC – Reserva de Cartão Consignado</option><option value="RMC/RCC">RMC + RCC (contratos somados)</option></select></div>
-    <div><label for="valor">Valor recebido (R$)</label><input id="valor" inputmode="decimal" placeholder="1.500,00" required>
-      <div class="hint" id="valorHint">O "saque" creditado na conta.</div></div>
+    <div><label for="valor">Valor depositado em conta (R$)</label><input id="valor" inputmode="decimal" placeholder="1.500,00" required>
+      <div class="hint" id="valorHint">Valor efetivamente depositado na conta (extrato bancário).</div></div>
     <div><label for="contrato">Mês da contratação</label><input id="contrato" type="month" required></div>
     <div><label for="pmt">Desconto mensal (R$)</label><input id="pmt" inputmode="decimal" placeholder="90,00" required></div>
     <div><label for="primeiro">1º desconto no benefício</label><input id="primeiro" type="month" required></div>
@@ -272,7 +272,7 @@ footer b{color:var(--ink2)}
     <ol class="method" id="metodo"></ol>
   </div>
 </section>
-<footer><b>Versão 07/11/2026 · 19h05</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
+<footer><b>Versão 11/11/2026 · 19h00</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
 </main>
 <div class="toast" id="toast"></div>
 
@@ -311,18 +311,30 @@ function calcular(inp, D) {
   if (fim < ini) throw new Error('O último desconto é anterior ao primeiro.');
   if (inp.jurosDesde === 'nenhum') avisos.push('Sem juros de mora: eles só correm a partir da citação (art. 405 do CC), ainda não ocorrida.');
 
-  let saldo = inp.P, quit = null, rows = [];
-  let totDesc = 0, totInd = 0, totAtual = 0, totFinal = 0, totFinalSimples = 0, totFinalDobro = 0, nApos = 0;
-  for (let k = ini; k <= fim; k++) {
-    const pmt = inp.excecoes && inp.excecoes[k] !== undefined ? inp.excecoes[k] : inp.pmt;
+  // créditos efetivamente disponibilizados (data e valor). Sem lista, um único crédito P no mês da contratação.
+  const creditos = (inp.creditos && inp.creditos.length ? inp.creditos : [{ ym: inp.contrato, valor: inp.P, natureza: 'crédito em conta' }])
+    .map(c => ({ ...c, idx: ymToIdx(c.ym) })).sort((a, b) => a.idx - b.idx);
+  const credMes = {}; creditos.forEach(c => { (credMes[c.idx] = credMes[c.idx] || []).push(c); });
+  const totCred = creditos.reduce((s, c) => s + c.valor, 0);
+  const inicio = Math.min(ini, creditos[0].idx);
+  if (creditos[0].idx > ini) avisos.push('Há desconto anterior ao primeiro crédito informado: confira as datas.');
+
+  let saldo = 0, quit = null, rows = [];
+  let totDesc = 0, totInd = 0, totAtual = 0, totFinal = 0, totFinalSimples = 0, totFinalDobro = 0, nApos = 0, totCorr = 0, totJur = 0;
+  const ultCred = creditos[creditos.length - 1].idx;
+  for (let k = inicio; k <= fim; k++) {
+    const pmt = k < ini ? 0 : (inp.excecoes && inp.excecoes[k] !== undefined ? inp.excecoes[k] : inp.pmt);
     totDesc += pmt;
-    const r = { idx: k, comp: idxToLabel(k), saldoIni: saldo, juros: 0, desconto: pmt, amort: 0, saldoFim: 0, indebito: 0 };
-    if (saldo > 0.005) {
-      r.juros = saldo * i;
-      const devido = saldo + r.juros;
-      if (pmt >= devido) { r.amort = saldo; r.indebito = pmt - devido; saldo = 0; quit = k; r.situacao = 'quitação'; }
-      else { r.amort = pmt - r.juros; saldo = saldo - r.amort; r.situacao = 'amortização'; }
-    } else { r.indebito = pmt; r.situacao = 'indébito'; if (pmt > 0) nApos++; }
+    const cm = credMes[k] || [], cr = cm.reduce((s, c) => s + c.valor, 0);
+    const r = { idx: k, comp: idxToLabel(k), saldoIni: saldo, credito: cr, creditoDesc: cm.map(c => c.natureza + (c.data ? ' ' + c.data : '')).join('; '), taxa: inp.taxa, juros: 0, desconto: pmt, amort: 0, saldoFim: 0, indebito: 0 };
+    // juros sobre o saldo do início da competência; crédito do mês entra sem juros no próprio mês
+    r.juros = saldo > 0.005 ? saldo * i : 0;
+    const devido = saldo + r.juros + cr;
+    if (devido > 0.005) {
+      if (pmt >= devido && k >= ultCred) { r.amort = devido - r.juros; r.indebito = pmt - devido; saldo = 0; quit = k; r.situacao = 'quitação'; }
+      else if (pmt >= devido) { r.amort = devido - r.juros; r.indebito = pmt - devido; saldo = 0; r.situacao = 'quitação parcial'; }
+      else { r.amort = pmt - r.juros; saldo = devido - pmt; r.situacao = pmt > 0 ? 'amortização' : (cr > 0 ? 'crédito' : 'juros'); }
+    } else { r.indebito = pmt; r.situacao = pmt > 0 ? 'indébito' : '—'; if (pmt > 0) nApos++; }
     r.saldoFim = saldo;
 
     if (r.indebito > 0) {
@@ -343,7 +355,9 @@ function calcular(inp, D) {
       }
       const dobro = inp.dobro === 'integral' ? true : inp.dobro === 'simples' ? false : k >= DOBRO_DESDE;
       r.fator = fc; r.jurosPct = j;
+      r.correcao = r.indebito * (fc - 1); r.jurosMora = r.indebito * fc * j;
       r.atualizado = r.indebito * fc * (1 + j);
+      totCorr += r.correcao; totJur += r.jurosMora;
       r.dobro = dobro;
       r.final = r.atualizado * (dobro ? 2 : 1);
       totInd += r.indebito; totAtual += r.atualizado; totFinal += r.final;
@@ -368,9 +382,10 @@ function calcular(inp, D) {
     }
   }
   const ultIPCA = serieUltimo(D, 'IPCA');
-  if (B > ultIPCA) avisos.push('Correção aplicada até ' + idxToLabel(ultIPCA) + ', último índice publicado pelo IBGE.');
+  const baseEfetiva = Math.min(B, ultIPCA);
+  if (B > ultIPCA) avisos.push('Data-base informada: ' + idxToLabel(B) + '. Correção monetária e juros aplicados até ' + idxToLabel(ultIPCA) + ', último índice mensal publicado e embutido na calculadora; a atualização dos meses seguintes deve ser complementada quando os índices forem divulgados.');
   return {
-    rows, quit, saldoAberto: saldo, previsao, totDesc, totInd, totAtual, totFinal, totFinalSimples, totFinalDobro,
+    rows, quit, saldoAberto: saldo, previsao, totDesc, totInd, totAtual, totFinal, totFinalSimples, totFinalDobro, totCorr, totJur, totCred, creditos, baseEfetiva,
     nParcelas: rows.filter(x => x.desconto > 0).length, nAteQuit: quit === null ? null : rows.filter(x => x.idx <= quit && x.desconto > 0).length, nApos, avisos,
     valorCausa: totFinal + (inp.danoMoral || 0)
   };
@@ -398,7 +413,7 @@ $('ultimosIdx').textContent = 'IPCA/INPC ' + idxToLabel(serieUltimo(D, 'IPCA')) 
 let taxaManual = false;
 let fonteValor = 'manual'; // 'saque' | 'limite' | 'manual'
 $('taxa').addEventListener('input', () => taxaManual = true);
-$('valor').addEventListener('input', () => { fonteValor = 'manual'; $('valorHint').textContent = 'O "saque" creditado na conta.'; });
+$('valor').addEventListener('input', () => { fonteValor = 'manual'; $('valorHint').textContent = 'Valor efetivamente depositado na conta (extrato bancário).'; });
 $('contrato').addEventListener('change', () => {
   const v = $('contrato').value; if (!v) return;
   const idx = ymToIdx(v);
@@ -446,7 +461,7 @@ function lerComuns() {
 function lerEntrada() {
   const P = parseBR($('valor').value), pmt = parseBR($('pmt').value), taxa = parseBR($('taxa').value);
   const errs = [];
-  if (!(P > 0)) errs.push('Informe o valor recebido.');
+  if (!(P > 0)) errs.push('Informe o valor depositado em conta.');
   if (!(pmt > 0)) errs.push('Informe o desconto mensal.');
   if (!(taxa > 0)) errs.push('Informe a taxa mensal.');
   ['contrato', 'primeiro', 'ultimo'].forEach(k => { if (!$(k).value) errs.push('Preencha o campo de data "' + document.querySelector('label[for=' + k + ']').textContent + '".'); });
@@ -463,23 +478,27 @@ function lerEntrada() {
 function previsaoTxt(r) {
   const p = r.previsao; if (!p) return '';
   if (p.nunca) return 'o desconto mensal não cobre sequer os juros do saldo recalculado, de modo que a dívida não se extinguiria sem revisão do valor da parcela';
-  return 'mantido o mesmo desconto, a dívida recalculada estaria quitada em ' + idxToLabel(p.mes) + ', após mais ' + p.nRestantes + ' descontos (o último de ' + brl(p.ultimaParcela) + '), totalizando ' + brl(p.totalRestante) + ' a pagar a partir de agora';
+  return 'mantido o mesmo desconto, a dívida recalculada estaria quitada em ' + idxToLabel(p.mes) + ', após mais ' + (p.nRestantes === 1 ? '1 desconto' : p.nRestantes + ' descontos') + ' (' + (p.nRestantes === 1 ? 'de ' : 'o último de ') + brl(p.ultimaParcela) + '), totalizando ' + brl(p.totalRestante) + ' a pagar a partir de agora';
 }
 function descContrato(inp) {
   return 'cartão de crédito consignado (' + inp.modalidade + ')' + (inp.numContrato ? ' nº ' + inp.numContrato : '') + (inp.banco ? ', contratado com ' + inp.banco : '');
 }
+const DADOS_EXTRAIDOS = '07/11/2026';
+const dataTxt = d => d ? d.split('-').reverse().join('/') : null;
 function valorTxt(inp) {
-  return inp.fonteValor === 'limite'
-    ? 'considerado como valor do crédito o limite do cartão, de ' + brl(inp.P) + ', em ' + lbl(inp.contrato)
-    : 'valor creditado de ' + brl(inp.P) + ', em ' + lbl(inp.contrato);
+  if (inp.fonteValor === 'limite') return 'considerado provisoriamente como valor do crédito o limite do cartão, de ' + brl(inp.P) + ', em ' + lbl(inp.contrato) + ', pendente de conciliação com o extrato bancário';
+  const outros = (inp.creditos || []).slice(1);
+  return 'crédito efetivamente depositado em conta de ' + brl(inp.P) + (inp.dataCredito ? ' em ' + dataTxt(inp.dataCredito) : ', em ' + lbl(inp.contrato)) +
+    (outros.length ? ', além de ' + outros.map(c => brl(c.valor) + ' (' + c.natureza + (c.data ? ', ' + c.data : '') + ')').join(', ') : '');
 }
+const baseTxt = (c, items) => { const be = Math.min(...items.map(x => x.r.baseEfetiva)); return idxToLabel(be); };
 function textoPeticao(items) {
   const c = items[0].inp, T = consolidar(items);
   const quem = c.cliente ? 'a parte autora, ' + c.cliente + ',' : 'a parte autora';
   let t;
   if (items.length === 1) {
     const { inp, r } = items[0];
-    t = 'Conforme memória de cálculo anexa, o ' + descContrato(inp) + ' (' + valorTxt(inp) + ') foi recalculado como empréstimo consignado comum, à taxa média de mercado divulgada pelo Banco Central do Brasil para o crédito pessoal consignado a aposentados e pensionistas do INSS no mês da contratação (' + num(inp.taxa) + '% a.m. – série SGS 25468), mantido o desconto mensal de ' + brl(inp.pmt) + '. ';
+    t = 'Conforme memória de cálculo anexa, o ' + descContrato(inp) + ' (' + valorTxt(inp) + ') foi recalculado como empréstimo consignado comum, à taxa média de mercado divulgada pelo Banco Central do Brasil para o crédito pessoal consignado a aposentados e pensionistas do INSS no mês da contratação (' + num(inp.taxa) + '% a.m. – série SGS 25468, competência ' + lbl(inp.contrato) + '), mantido o desconto mensal de ' + brl(inp.pmt) + '. ';
     if (r.quit === null) return t + 'Nessa condição, até ' + lbl(inp.ultimo) + ' foram descontados ' + brl(r.totDesc) + ', restando saldo devedor recalculado de ' + brl(r.saldoAberto) + '; ' + previsaoTxt(r) + '. Não há, por ora, indébito a restituir quanto a esse contrato, impondo-se a conversão para que os descontos cessem na data indicada.';
     t += 'Nessa condição, a dívida estaria integralmente quitada em ' + idxToLabel(r.quit) + ', após ' + r.nAteQuit + ' descontos. Contudo, até ' + lbl(inp.ultimo) + ' foram descontados ' + brl(r.totDesc) + ' do benefício, de modo que ' + r.nApos + ' parcelas posteriores à quitação, além do excedente do mês da quitação, totalizando ' + brl(r.totInd) + ', foram cobradas indevidamente. ';
   } else {
@@ -488,7 +507,7 @@ function textoPeticao(items) {
       (r.quit !== null ? 'quitação em ' + idxToLabel(r.quit) + ', após ' + r.nAteQuit + ' descontos, com indébito nominal de ' + brl(r.totInd) : 'ainda não quitado, com saldo recalculado de ' + brl(r.saldoAberto) + ' (' + previsaoTxt(r) + ')')).join('; ') + '. ';
     t += 'Somados os contratos, foram descontados ' + brl(T.totDesc) + ' do benefício, dos quais ' + brl(T.totInd) + ' após as respectivas quitações (' + T.nApos + ' parcelas indevidas). ';
   }
-  t += 'Atualizado até ' + lbl(c.base) + ' ' + atualizacaoTxt(c) + ', o indébito soma ' + brl(T.totAtual) + ', cuja restituição deve se dar ' + DOBRO_TXT[c.dobro] + ', o que resulta em ' + brl(T.totFinal) + '.';
+  t += 'Atualizado até ' + baseTxt(c, items) + ' (último índice publicado) ' + atualizacaoTxt(c) + ', o indébito soma ' + brl(T.totAtual) + ', cuja restituição deve se dar ' + DOBRO_TXT[c.dobro] + ', o que resulta em ' + brl(T.totFinal) + '.';
   if (c.danoMoral > 0) t += ' Somados os danos morais pleiteados (' + brl(c.danoMoral) + '), atribui-se à causa o valor de ' + brl(T.totFinal + c.danoMoral) + '.';
   return t;
 }
@@ -503,17 +522,51 @@ function consolidar(items) {
   return T;
 }
 
+// conciliação do crédito, quadro de taxas e pendências de cada contrato
+function conciliacao(inp, r) {
+  const L = [];
+  if (inp.limite > 0) L.push(['Limite do cartão (extrato do INSS)', brl(inp.limite)]);
+  (r.creditos || []).forEach((c, i) => L.push([i === 0 ? (inp.fonteValor === 'limite' ? 'Crédito considerado (provisório: limite do cartão)' : 'Crédito depositado em conta') : 'Outro crédito/utilização', brl(c.valor) + (c.data ? ' em ' + c.data : ' em ' + idxToLabel(c.idx)) + (c.natureza && i > 0 ? ' – ' + c.natureza : '')]));
+  L.push(['Total de créditos considerados no cálculo', brl(r.totCred)]);
+  if (inp.limite > 0 && inp.fonteValor !== 'limite') {
+    const dif = inp.limite - r.totCred;
+    if (Math.abs(dif) > 0.004) L.push(['Diferença limite − créditos (a conciliar)', brl(dif) + ' – ponto de conciliação, não é indébito nem valor devido']);
+  }
+  return L;
+}
+function quadroTaxas(inp) {
+  return [
+    ['Taxa contratada', inp.taxaContratada > 0 ? num(inp.taxaContratada) + '% a.m.' : 'não informada (depende do contrato/fatura)'],
+    ['CET', inp.cet > 0 ? num(inp.cet) + '% a.m.' : 'não informado'],
+    ['Teto normativo da modalidade na contratação', inp.teto > 0 ? num(inp.teto) + '% a.m.' + (inp.tetoFonte ? ' – ' + inp.tetoFonte : '') : 'não informado (conferir ato do CNPS/INSS vigente em ' + lbl(inp.contrato) + ')'],
+    ['Taxa média BACEN usada no recálculo', num(inp.taxa) + '% a.m. – SGS 25468, competência ' + lbl(inp.contrato) + ', extraída em ' + DADOS_EXTRAIDOS]
+  ];
+}
+function pendencias(inp, r) {
+  const P = [];
+  if (inp.fonteValor === 'limite') P.push('Informar o valor efetivamente depositado em conta (extrato bancário): o limite de ' + brl(inp.P) + ' foi usado só provisoriamente.');
+  else if (!inp.dataCredito) P.push('Informar a data exata do depósito em conta.');
+  if (inp.limite > 0 && inp.fonteValor !== 'limite' && Math.abs(inp.limite - r.totCred) > 0.004) P.push('Conciliar a diferença de ' + brl(inp.limite - r.totCred) + ' entre o limite e os créditos: verificar faturas e demonstrativos do cartão (saques adicionais, compras, quitação de dívida, tarifas, seguros, IOF ou valor não disponibilizado).');
+  if (!inp.hiscre) P.push('Confirmar os descontos de ' + brl(inp.pmt) + ' mês a mês no histórico oficial do INSS (HISCRE), separando RMC e RCC.');
+  if (!(inp.taxaContratada > 0)) P.push('Juntar contrato/termo de adesão e faturas com a taxa contratada e o CET.');
+  if (!(inp.teto > 0)) P.push('Indicar o teto de juros vigente para a modalidade na data da contratação (ato do CNPS/INSS).');
+  P.push('Anexar a consulta da série SGS 25468 do BACEN para ' + lbl(inp.contrato) + '.');
+  return P;
+}
+
 function metodologia(items) {
   const c = items[0].inp;
   const taxas = items.map(({ inp }) => num(inp.taxa) + '% a.m. (' + lbl(inp.contrato) + (items.length > 1 && inp.numContrato ? ', contrato ' + inp.numContrato : '') + ')').join('; ');
   const lim = items.some(({ inp }) => inp.fonteValor === 'limite');
+  const be = baseTxt(c, items), bInf = lbl(c.base);
   return [
-    'Taxa de juros: taxa média mensal do BACEN para crédito pessoal consignado a aposentados e pensionistas do INSS (SGS 25468) do mês da contratação: ' + taxas + '.',
+    'Fluxo financeiro: o cálculo parte dos créditos efetivamente disponibilizados ao consumidor, lançados na competência de cada depósito, e não do limite nominal do cartão. A diferença entre o limite e o valor depositado é apresentada como ponto de conciliação, e não como indébito.',
+    'Taxa de recálculo: taxa média mensal do BACEN para crédito pessoal consignado a aposentados e pensionistas do INSS (SGS 25468), na competência de cada contratação: ' + taxas + ', conforme série histórica extraída em ' + DADOS_EXTRAIDOS + '. Trata-se de parâmetro comparativo para a hipótese de recálculo como empréstimo consignado comum (taxa média de mercado – Súmula 530/STJ), que não se confunde com o teto normativo fixado para o cartão consignado; a taxa contratada, o CET e o teto da época são apresentados lado a lado, quando informados.',
     items.length > 1 ? 'Cada contrato foi recalculado separadamente, com sua data, taxa e desconto; os resultados foram somados.' : null,
     items.some(({ inp }) => inp.hiscre) ? 'Descontos: valores efetivamente descontados em cada competência, conforme o Histórico de Créditos (HISCRE) do INSS; nos meses não constantes do histórico, o valor reservado atual.' : null,
-    lim ? 'Valor do crédito: na falta do valor sacado no extrato do INSS, foi considerado o limite do cartão informado no extrato.' : null,
-    'Amortização mês a mês: juros = saldo × taxa; amortização = desconto − juros. Quitado o saldo, o excedente do mês e todos os descontos seguintes são indébito.',
-    'Atualização desde cada desconto (Súmula 43/STJ), pelo produto dos índices mensais posteriores ao mês do desconto até a data-base, ' + atualizacaoTxt(c) + '.',
+    lim ? 'Valor do crédito: em ao menos um contrato não foi informado o depósito bancário, e o limite do cartão foi usado provisoriamente. Esse valor deve ser substituído pelo crédito comprovado no extrato bancário antes do uso da memória.' : null,
+    'Amortização mês a mês: juros = saldo do início da competência × taxa; o crédito entra no saldo na competência do depósito, sem juros nesse mês; amortização = desconto − juros. Quitado o saldo, o excedente do mês e todos os descontos seguintes são indébito.',
+    'Atualização somente sobre o indébito apurado, desde cada desconto excedente (Súmula 43/STJ), pelo produto dos índices mensais posteriores ao mês do desconto até ' + be + ', último índice publicado' + (be !== bInf ? ' (data-base informada: ' + bInf + '; os meses seguintes serão atualizados quando divulgados os índices)' : '') + ', ' + atualizacaoTxt(c) + '. Correção monetária e juros de mora constam em colunas separadas.',
     'Juros de mora somados mês a mês de forma simples; a taxa legal (SELIC − IPCA) nunca é negativa (art. 406, § 3º, do CC). A taxa SELIC, quando aplicada isoladamente, também é somada de forma simples.',
     'Repetição do indébito ' + DOBRO_TXT[c.dobro] + '.',
     'Fontes: Banco Central do Brasil – SGS (25468 taxa do consignado INSS; 433 IPCA; 188 INPC; 4390 SELIC mensal).'
@@ -522,18 +575,18 @@ function metodologia(items) {
 
 // ===== tela de resultado =====
 function tabelaHTML(inp, r) {
-  let h = '<table><thead><tr><th>Compet.</th><th>Saldo inicial</th><th>Juros (' + num(inp.taxa) + '%)</th><th>Desconto</th><th>Amortização</th><th>Saldo final</th><th>Situação</th><th>Indébito</th><th>Fator corr.</th><th>Juros mora</th><th>Atualizado</th><th>Dobro</th><th>A restituir</th></tr></thead><tbody>';
+  let h = '<table><thead><tr><th>Compet.</th><th>Saldo inicial</th><th>Crédito</th><th>Taxa</th><th>Juros</th><th>Desconto</th><th>Amortização</th><th>Saldo final</th><th>Situação</th><th>Indébito</th><th>Correção</th><th>Juros mora</th><th>Atualizado</th><th>Dobro</th><th>A restituir</th></tr></thead><tbody>';
   r.rows.forEach(x => {
     const c = x.situacao === 'quitação' ? 'q' : x.situacao === 'indébito' ? 'i' : '';
     const tg = x.situacao === 'quitação' ? 'q' : x.situacao === 'indébito' ? 'i' : 'a';
-    h += '<tr class="' + c + '"><td>' + x.comp + '</td><td>' + num(x.saldoIni) + '</td><td>' + num(x.juros) + '</td><td>' + num(x.desconto) + '</td><td>' + num(x.amort) + '</td><td>' + num(x.saldoFim) + '</td><td class="sit"><span class="tag ' + tg + '">' + x.situacao + '</span></td>' +
-      (x.indebito > 0 ? '<td>' + num(x.indebito) + '</td><td>' + num(x.fator, 6) + '</td><td>' + num(x.jurosPct * 100) + '%</td><td>' + num(x.atualizado) + '</td><td>' + (x.dobro ? 'sim' : 'não') + '</td><td>' + num(x.final) + '</td>' : '<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>') + '</tr>';
+    h += '<tr class="' + c + '"><td>' + x.comp + '</td><td>' + num(x.saldoIni) + '</td><td' + (x.creditoDesc ? ' title="' + esc(x.creditoDesc) + '"' : '') + '>' + (x.credito ? num(x.credito) : '–') + '</td><td>' + num(x.taxa) + '%</td><td>' + num(x.juros) + '</td><td>' + num(x.desconto) + '</td><td>' + num(x.amort) + '</td><td>' + num(x.saldoFim) + '</td><td class="sit"><span class="tag ' + tg + '">' + x.situacao + '</span></td>' +
+      (x.indebito > 0 ? '<td>' + num(x.indebito) + '</td><td>' + num(x.correcao) + '</td><td>' + num(x.jurosMora) + '</td><td>' + num(x.atualizado) + '</td><td>' + (x.dobro ? 'sim' : 'não') + '</td><td>' + num(x.final) + '</td>' : '<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>') + '</tr>';
   });
   if (r.previsao && r.previsao.rows) {
-    h += '<tr class="sep"><td colspan="13">Projeção até a quitação (mesmo desconto e mesma taxa)</td></tr>';
-    r.previsao.rows.forEach(x => { h += '<tr class="p"><td>' + x.comp + '</td><td>' + num(x.saldoIni) + '</td><td>' + num(x.juros) + '</td><td>' + num(x.desconto) + '</td><td>' + num(x.amort) + '</td><td>' + num(x.saldoFim) + '</td><td class="sit"><span class="tag p">a vencer</span></td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>'; });
+    h += '<tr class="sep"><td colspan="15">Projeção até a quitação (mesmo desconto e mesma taxa)</td></tr>';
+    r.previsao.rows.forEach(x => { h += '<tr class="p"><td>' + x.comp + '</td><td>' + num(x.saldoIni) + '</td><td>–</td><td>' + num(inp.taxa) + '%</td><td>' + num(x.juros) + '</td><td>' + num(x.desconto) + '</td><td>' + num(x.amort) + '</td><td>' + num(x.saldoFim) + '</td><td class="sit"><span class="tag p">a vencer</span></td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>'; });
   }
-  return h + '</tbody><tfoot><tr><td>Totais</td><td></td><td></td><td>' + num(r.totDesc) + '</td><td></td><td></td><td></td><td>' + num(r.totInd) + '</td><td></td><td></td><td>' + num(r.totAtual) + '</td><td></td><td>' + num(r.totFinal) + '</td></tr></tfoot></table>';
+  return h + '</tbody><tfoot><tr><td>Totais</td><td></td><td>' + num(r.totCred) + '</td><td></td><td></td><td>' + num(r.totDesc) + '</td><td></td><td></td><td></td><td>' + num(r.totInd) + '</td><td>' + num(r.totCorr) + '</td><td>' + num(r.totJur) + '</td><td>' + num(r.totAtual) + '</td><td></td><td>' + num(r.totFinal) + '</td></tr></tfoot></table>';
 }
 
 let ultimo = null;
@@ -553,12 +606,12 @@ function render(items) {
   k.push(['Parcelas pagas a mais', String(T.nApos), 'após a quitação', 'bad']);
   k.push(['Total descontado', brl(T.totDesc), T.nParcelas + ' descontos', '']);
   k.push(['Indébito nominal', brl(T.totInd), 'sem correção', 'bad']);
-  k.push(['Indébito atualizado', brl(T.totAtual), 'até ' + lbl(c.base), '']);
+  k.push(['Indébito atualizado', brl(T.totAtual), 'até ' + baseTxt(c, items) + ' (último índice)', '']);
   k.push(['Total a restituir', brl(T.totFinal), c.dobro === 'modulado' ? 'simples ' + brl(T.totFinalSimples) + ' · dobro ' + brl(T.totFinalDobro) : (c.dobro === 'integral' ? 'em dobro' : 'simples'), 'hl']);
   if (c.danoMoral > 0) k.push(['Valor da causa', brl(T.totFinal + c.danoMoral), 'com danos morais', 'hl']);
   // destaque principal
   let hero;
-  if (T.totFinal > 0) hero = ['Total a restituir ao cliente', brl(T.totFinal), 'indébito de ' + brl(T.totInd) + ' atualizado até ' + lbl(c.base) + (c.dobro !== 'simples' ? ', com dobro após 03/2021' : ''), T.nApos + ' parcelas descontadas depois da quitação'];
+  if (T.totFinal > 0) hero = ['Total a restituir ao cliente', brl(T.totFinal), 'indébito de ' + brl(T.totInd) + ' atualizado até ' + baseTxt(c, items) + (c.dobro !== 'simples' ? ', com dobro após 03/2021' : ''), T.nApos + ' parcelas descontadas depois da quitação'];
   else {
     const pv = items.map(x => x.r.previsao).filter(p => p && !p.nunca);
     const fim = pv.length ? Math.max(...pv.map(p => p.mes)) : null;
@@ -585,10 +638,11 @@ function render(items) {
   const pd = T.totDesc > 0 ? Math.max(0, Math.min(100, devido / T.totDesc * 100)) : 0;
   $('compare').innerHTML = T.totDesc > 0 ? '<div class="bar"><span style="width:' + pd + '%;background:#1f4f82">' + (pd > 32 ? 'devido' : '') + '</span><span style="width:' + (100 - pd) + '%;background:#c0392b">' + (100 - pd > 32 ? 'indevido' : '') + '</span></div>' +
     '<div class="legend"><span><i style="background:#1f4f82"></i>Seria devido como consignado: <b>' + brl(devido) + '</b></span><span><i style="background:#c0392b"></i>Descontado a mais: <b>' + brl(T.totInd) + '</b></span></div>' : '';
-  $('avisos').innerHTML = T.avisos.map(a => '<div class="aviso">' + a + '</div>').join('');
+  $('avisos').innerHTML = T.avisos.map(a => '<div class="aviso">' + a + '</div>').join('') +
+    items.map(({ inp, r }) => { const pd = pendencias(inp, r); return '<div class="aviso"><b>Pendências' + (multi ? ' – ' + esc(inp.modalidade + ' ' + (inp.numContrato || '')) : '') + ':</b><ul style="margin:4px 0 0 18px;padding:0">' + pd.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></div>'; }).join('');
   $('texto').textContent = textoPeticao(items);
   $('tabs').innerHTML = items.map(({ inp, r }) =>
-    (multi ? '<h3 class="subt">' + esc(inp.modalidade + ' · ' + (inp.banco || '') + (inp.numContrato ? ' · contrato ' + inp.numContrato : '')) + '<span>' + brl(inp.P) + ' em ' + lbl(inp.contrato) + ' · ' + num(inp.taxa) + '% a.m. · desconto ' + brl(inp.pmt) + '</span></h3>' : '') +
+    '<h3 class="subt">' + esc(inp.modalidade + ' · ' + (inp.banco || '') + (inp.numContrato ? ' · contrato ' + inp.numContrato : '')) + '<span>' + conciliacao(inp, r).map(([a, b]) => esc(a) + ': ' + esc(b)).join(' · ') + ' · ' + num(inp.taxa) + '% a.m. (SGS 25468, ' + lbl(inp.contrato) + ') · desconto ' + brl(inp.pmt) + '</span></h3>' +
     '<div class="tablewrap">' + tabelaHTML(inp, r) + '</div>').join('');
   $('metodo').innerHTML = metodologia(items).map(m => '<li>' + m + '</li>').join('');
   $('resultado').style.display = 'block';
@@ -635,31 +689,31 @@ async function gerarDocx(items) {
     new TableCell({ margins: { top: 40, bottom: 40, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: b, size: 20, font: F })] })] })
   ] })) });
   const memoria = (inp, r) => {
-    const heads = ['Compet.', 'Saldo inicial', 'Juros', 'Desconto', 'Amortização', 'Saldo final', 'Situação', 'Indébito', 'Fator corr.', 'Juros mora', 'Atualizado', 'Dobro', 'A restituir'];
+    const heads = ['Compet.', 'Saldo inicial', 'Crédito', 'Taxa', 'Juros', 'Desconto', 'Amortiz.', 'Saldo final', 'Situação', 'Indébito', 'Correção', 'Juros mora', 'Atualizado', 'Dobro', 'A restituir'];
     const rows = [new TableRow({ tableHeader: true, children: heads.map((h, i) => cell(h, { head: true, left: i === 0 })) })];
     r.rows.forEach(x => {
       const fill = x.situacao === 'quitação' ? 'FFF3D6' : x.situacao === 'indébito' ? 'FBE6E4' : undefined, ind = x.indebito > 0;
       rows.push(new TableRow({ children: [
-        cell(x.comp, { left: true, fill }), cell(num(x.saldoIni), { fill }), cell(num(x.juros), { fill }), cell(num(x.desconto), { fill }), cell(num(x.amort), { fill }), cell(num(x.saldoFim), { fill }), cell(x.situacao, { fill }),
-        cell(ind ? num(x.indebito) : '–', { fill }), cell(ind ? num(x.fator, 6) : '–', { fill }), cell(ind ? num(x.jurosPct * 100) + '%' : '–', { fill }), cell(ind ? num(x.atualizado) : '–', { fill }), cell(ind ? (x.dobro ? 'sim' : 'não') : '–', { fill }), cell(ind ? num(x.final) : '–', { fill })
+        cell(x.comp, { left: true, fill }), cell(num(x.saldoIni), { fill }), cell(x.credito ? num(x.credito) : '–', { fill }), cell(num(x.taxa) + '%', { fill }), cell(num(x.juros), { fill }), cell(num(x.desconto), { fill }), cell(num(x.amort), { fill }), cell(num(x.saldoFim), { fill }), cell(x.situacao, { fill }),
+        cell(ind ? num(x.indebito) : '–', { fill }), cell(ind ? num(x.correcao) : '–', { fill }), cell(ind ? num(x.jurosMora) : '–', { fill }), cell(ind ? num(x.atualizado) : '–', { fill }), cell(ind ? (x.dobro ? 'sim' : 'não') : '–', { fill }), cell(ind ? num(x.final) : '–', { fill })
       ] }));
     });
     if (r.previsao && r.previsao.rows) {
-      rows.push(new TableRow({ children: [new TableCell({ columnSpan: 13, shading: { type: ShadingType.CLEAR, fill: 'E3ECF7', color: 'auto' }, children: [new Paragraph({ children: [new TextRun({ text: 'Projeção até a quitação (mesmo desconto e mesma taxa)', bold: true, size: 15, font: 'Arial' })] })] })] }));
-      r.previsao.rows.forEach(x => rows.push(new TableRow({ children: [cell(x.comp, { left: true }), cell(num(x.saldoIni)), cell(num(x.juros)), cell(num(x.desconto)), cell(num(x.amort)), cell(num(x.saldoFim)), cell('a vencer'), cell('–'), cell('–'), cell('–'), cell('–'), cell('–'), cell('–')] })));
+      rows.push(new TableRow({ children: [new TableCell({ columnSpan: 15, shading: { type: ShadingType.CLEAR, fill: 'E3ECF7', color: 'auto' }, children: [new Paragraph({ children: [new TextRun({ text: 'Projeção até a quitação (mesmo desconto e mesma taxa)', bold: true, size: 15, font: 'Arial' })] })] })] }));
+      r.previsao.rows.forEach(x => rows.push(new TableRow({ children: [cell(x.comp, { left: true }), cell(num(x.saldoIni)), cell('–'), cell(num(inp.taxa) + '%'), cell(num(x.juros)), cell(num(x.desconto)), cell(num(x.amort)), cell(num(x.saldoFim)), cell('a vencer'), cell('–'), cell('–'), cell('–'), cell('–'), cell('–'), cell('–')] })));
     }
-    rows.push(new TableRow({ children: ['Totais', '', '', num(r.totDesc), '', '', '', num(r.totInd), '', '', num(r.totAtual), '', num(r.totFinal)].map((t, i) => cell(t, { bold: true, left: i === 0, fill: 'E6EBF2' })) }));
+    rows.push(new TableRow({ children: ['Totais', '', num(r.totCred), '', '', num(r.totDesc), '', '', '', num(r.totInd), num(r.totCorr), num(r.totJur), num(r.totAtual), '', num(r.totFinal)].map((t, i) => cell(t, { bold: true, left: i === 0, fill: 'E6EBF2' })) }));
     return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows });
   };
   const resumoContrato = (inp, r) => [
     ['Banco', inp.banco || '—'], ['Contrato', inp.numContrato || '—'], ['Modalidade', inp.modalidade],
-    [inp.fonteValor === 'limite' ? 'Valor do crédito (limite do cartão)' : 'Valor recebido', brl(inp.P) + ' em ' + lbl(inp.contrato)], ['Desconto mensal', brl(inp.pmt)],
+    [inp.fonteValor === 'limite' ? 'Crédito considerado (provisório: limite do cartão)' : 'Crédito depositado em conta', brl(inp.P) + (inp.dataCredito ? ' em ' + dataTxt(inp.dataCredito) : ' em ' + lbl(inp.contrato))], ['Desconto mensal', brl(inp.pmt)],
     ['Período dos descontos', lbl(inp.primeiro) + ' a ' + lbl(inp.ultimo) + ' (' + r.nParcelas + ' descontos)'],
-    ['Taxa aplicada', num(inp.taxa) + '% a.m. (BACEN – SGS 25468)'],
+    ['Taxa aplicada', num(inp.taxa) + '% a.m. (BACEN – SGS 25468, competência ' + lbl(inp.contrato) + ')'],
     r.quit !== null ? ['Quitação como consignado', idxToLabel(r.quit) + ' (' + r.nAteQuit + ' descontos)'] :
-      ['Quitação prevista', r.previsao && !r.previsao.nunca ? idxToLabel(r.previsao.mes) + ' – faltam ' + r.previsao.nRestantes + ' descontos; saldo recalculado ' + brl(r.saldoAberto) + '; total a pagar ' + brl(r.previsao.totalRestante) : 'não quita: desconto menor que os juros'],
+      ['Quitação prevista', r.previsao && !r.previsao.nunca ? idxToLabel(r.previsao.mes) + ' – ' + (r.previsao.nRestantes === 1 ? 'falta 1 desconto' : 'faltam ' + r.previsao.nRestantes + ' descontos') + '; saldo recalculado ' + brl(r.saldoAberto) + '; total a pagar ' + brl(r.previsao.totalRestante) : 'não quita: desconto menor que os juros'],
     ['Parcelas pagas após a quitação', String(r.nApos)], ['Total descontado', brl(r.totDesc)], ['Indébito nominal', brl(r.totInd)],
-    ['Indébito atualizado até ' + lbl(inp.base), brl(r.totAtual)], ['Total a restituir', brl(r.totFinal)]
+    ['Indébito atualizado até ' + idxToLabel(r.baseEfetiva), brl(r.totAtual) + (r.totInd > 0 ? ' (correção ' + brl(r.totCorr) + ' + juros ' + brl(r.totJur) + ')' : '')], ['Total a restituir', brl(r.totFinal)]
   ];
   const children = [
     p('MEMÓRIA DE CÁLCULO', { bold: true, align: AlignmentType.CENTER, size: 28, after: 60 }),
@@ -670,17 +724,22 @@ async function gerarDocx(items) {
     if (c0.danoMoral > 0) linhas.push(['Danos morais pleiteados', brl(c0.danoMoral)], ['Valor da causa', brl(T.totFinal + c0.danoMoral)]);
     children.push(kv(linhas));
   } else {
-    const linhas = [['Cliente', c0.cliente || '—'], ['Contratos calculados', String(items.length)], ['Total descontado', brl(T.totDesc)], ['Parcelas pagas após as quitações', String(T.nApos)], ['Indébito nominal', brl(T.totInd)], ['Indébito atualizado até ' + lbl(c0.base), brl(T.totAtual)], ['Total a restituir', brl(T.totFinal)]];
+    const linhas = [['Cliente', c0.cliente || '—'], ['Contratos calculados', String(items.length)], ['Total descontado', brl(T.totDesc)], ['Parcelas pagas após as quitações', String(T.nApos)], ['Indébito nominal', brl(T.totInd)], ['Indébito atualizado até ' + baseTxt(c0, items), brl(T.totAtual)], ['Total a restituir', brl(T.totFinal)]];
     if (c0.danoMoral > 0) linhas.push(['Danos morais pleiteados', brl(c0.danoMoral)], ['Valor da causa', brl(T.totFinal + c0.danoMoral)]);
     children.push(kv(linhas));
   }
   children.push(p('', { after: 120 }), p('Síntese', { bold: true }), p(textoPeticao(items)), p('Metodologia', { bold: true }),
     ...metodologia(items).map((m, i) => p((i + 1) + '. ' + m, { after: 80 })), ...T.avisos.map(a => p('Observação: ' + a, { after: 80 })));
   items.forEach(({ inp, r }, i) => {
+    const tit = items.length > 1 ? ' – contrato ' + (i + 1) : '';
     children.push(p('', { after: 160 }));
     if (items.length > 1) { children.push(p('Contrato ' + (i + 1) + ' – ' + inp.modalidade + (inp.numContrato ? ' nº ' + inp.numContrato : '') + (inp.banco ? ' – ' + inp.banco : ''), { bold: true })); children.push(kv(resumoContrato(inp, r))); children.push(p('', { after: 120 })); }
-    children.push(p('Memória mês a mês' + (items.length > 1 ? ' – contrato ' + (i + 1) : ''), { bold: true }), memoria(inp, r));
+    children.push(p('Conciliação do crédito' + tit, { bold: true }), kv(conciliacao(inp, r)), p('', { after: 120 }));
+    children.push(p('Taxas lado a lado' + tit, { bold: true }), kv(quadroTaxas(inp)), p('', { after: 120 }));
+    children.push(p('Memória mês a mês' + tit, { bold: true }), memoria(inp, r));
+    children.push(p('', { after: 120 }), p('Pendências documentais' + tit, { bold: true }), ...pendencias(inp, r).map((t, j) => p((j + 1) + '. ' + t, { after: 60 })));
   });
+  children.push(p('', { after: 120 }), p('Esta memória é técnica e provisória enquanto houver pendências documentais: os valores dependem da conciliação dos extratos bancários, faturas e históricos oficiais, e não constituem conclusão pericial nem garantia de crédito a restituir.', { size: 20 }));
   children.push(p('', { after: 240 }), p('Goiânia, ' + hoje.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }) + '.', { align: AlignmentType.RIGHT }));
   const doc = new Document({ sections: [{ properties: { page: { size: { orientation: PageOrientation.LANDSCAPE }, margin: { top: 900, bottom: 900, left: 900, right: 900 } } }, children }] });
   return Packer.toBlob(doc);
@@ -973,17 +1032,44 @@ function mostrarContratos() {
     return '<div class="ct" data-i="' + i + '"><div class="top"><label class="chk"><input type="checkbox" class="c-usar" checked> <span class="t">' + esc(c.modalidade) + ' · ' + esc(c.banco || 'banco não identificado') + '</span></label><span class="tag i">' + esc(c.situacao || 'Ativo') + '</span></div>' +
       '<div class="m">Contrato ' + esc(c.contrato || '—') + ' · incluído em ' + dataBR(c.data_inclusao) + (c.limite_cartao ? ' · limite ' + brl(c.limite_cartao) : '') + (c.valor_emprestado ? ' · valor sacado ' + brl(c.valor_emprestado) : '') + '</div>' +
       '<div class="ctgrid">' +
-      '<div><label>' + (vr.fonte === 'saque' ? 'Valor sacado (R$)' : 'Valor do crédito (R$)') + '</label><input class="c-valor" inputmode="decimal" value="' + (vr.v ? num(vr.v) : '') + '" data-fonte="' + vr.fonte + '"' + (vr.v ? '' : ' style="outline:2px solid #f0b429"') + '><div class="hint">' + (vr.fonte === 'saque' ? 'valor sacado do extrato' : vr.fonte === 'limite' ? 'limite do cartão (sem valor sacado no extrato)' : 'não consta: informe') + '</div></div>' +
+      '<div><label>Valor depositado em conta (R$)</label><input class="c-valor" inputmode="decimal" value="' + (vr.v ? num(vr.v) : '') + '" data-fonte="' + vr.fonte + '"' + (vr.fonte === 'saque' ? '' : ' style="outline:2px solid #f0b429"') + '><div class="hint">' + (vr.fonte === 'saque' ? 'valor sacado do extrato do INSS' : vr.fonte === 'limite' ? '<b>provisório: limite do cartão.</b> Digite o valor do extrato bancário' : 'informe o valor do extrato bancário') + '</div></div>' +
+      '<div><label>Data do depósito</label><input class="c-data" type="date" value="' + (isoOf(c.data_inclusao) || '') + '"><div class="hint">conforme extrato bancário</div></div>' +
       '<div><label>Desconto mensal (R$)</label><input class="c-pmt" inputmode="decimal" value="' + (c.valor_parcela ? num(c.valor_parcela) : '') + '"></div>' +
-      '<div><label>Mês da inclusão</label><input class="c-mes" type="month" value="' + (ymOf(c.data_inclusao) || '') + '"' + (ymOf(c.data_inclusao) ? '' : ' style="outline:2px solid #f0b429"') + '></div>' +
-      '</div></div>';
+      '<div><label>Mês da contratação</label><input class="c-mes" type="month" value="' + (ymOf(c.data_inclusao) || '') + '"' + (ymOf(c.data_inclusao) ? '' : ' style="outline:2px solid #f0b429"') + '><div class="hint">define a taxa BACEN</div></div>' +
+      '</div>' +
+      '<div class="dif hint" style="margin-top:6px"></div>' +
+      '<details style="margin-top:8px"><summary>Outros créditos, taxa contratada, CET e teto (opcional)</summary><div class="ctgrid" style="margin-top:8px">' +
+      '<div style="grid-column:1/-1"><label>Outros créditos ou utilizações do cartão</label><textarea class="c-outros" placeholder="15/08/2024 = 300,00 ; saque adicional&#10;10/10/2024 = 89,90 ; compra"></textarea><div class="hint">uma linha por lançamento: data = valor ; natureza</div></div>' +
+      '<div><label>Taxa contratada (% a.m.)</label><input class="c-tc" inputmode="decimal"></div>' +
+      '<div><label>CET (% a.m.)</label><input class="c-cet" inputmode="decimal"></div>' +
+      '<div><label>Teto INSS na época (% a.m.)</label><input class="c-teto" inputmode="decimal"></div>' +
+      '<div><label>Fonte do teto</label><input class="c-tetof" placeholder="Ex.: Resolução CNPS nº ..."></div>' +
+      '</div></details></div>';
   }).join('') +
     (lista.length > 1 ? '<div class="hint">Desmarque o contrato que não deve entrar no cálculo.</div><button type="button" class="btn green" id="calcTodos">Calcular os contratos marcados</button>' : '<button type="button" class="btn green" id="calcTodos">Calcular este contrato</button>') +
     (extraidos.observacoes ? '<div class="hint">' + esc(extraidos.observacoes) + '</div>' : '');
-  $('contratos').querySelectorAll('.c-valor').forEach(el => el.addEventListener('input', () => { el.dataset.fonte = 'manual'; el.style.outline = ''; }));
+  $('contratos').querySelectorAll('.c-valor').forEach(el => el.addEventListener('input', () => { el.dataset.fonte = 'manual'; el.style.outline = ''; const h = el.parentNode.querySelector('.hint'); if (h) h.textContent = 'valor informado do extrato bancário'; mostrarDif(el.closest('.ct')); }));
+  $('contratos').querySelectorAll('.ct').forEach(mostrarDif);
   $('calcTodos').addEventListener('click', calcularExtraidos);
   $('contratos').querySelectorAll('.c-usar').forEach(el => el.addEventListener('change', () => { el.closest('.ct').classList.toggle('off', !el.checked); calcularExtraidos(); }));
-  $('contratos').querySelectorAll('.c-valor,.c-pmt,.c-mes').forEach(el => el.addEventListener('change', calcularExtraidos));
+  $('contratos').querySelectorAll('.c-valor,.c-pmt,.c-mes,.c-data,.c-outros,.c-tc,.c-cet,.c-teto,.c-tetof').forEach(el => el.addEventListener('change', calcularExtraidos));
+}
+function isoOf(s) { const ym = ymOf(s); if (!ym) return null; const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/) || String(s).match(/\d{4}-\d{2}-(\d{2})/); const dd = m ? String(m[1]).padStart(2, '0') : '01'; return ym + '-' + (+dd >= 1 && +dd <= 31 ? dd : '01'); }
+function parseOutros(txt) {
+  const out = [], bad = [];
+  String(txt || '').split(/\n/).map(l => l.trim()).filter(Boolean).forEach(l => {
+    const m = l.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*[=:]\s*([\d.,]+)\s*(?:;\s*(.*))?$/);
+    if (!m) { bad.push(l); return; }
+    out.push({ ym: m[3] + '-' + m[2].padStart(2, '0'), data: m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + m[3], valor: parseBR(m[4]), natureza: (m[5] || 'outro crédito/utilização').trim() });
+  });
+  return { out, bad };
+}
+function mostrarDif(card) {
+  const c = extraidos.contratos[+card.dataset.i], v = parseBR(card.querySelector('.c-valor').value), el = card.querySelector('.dif');
+  if (!el) return;
+  if (c.limite_cartao > 0 && v > 0 && card.querySelector('.c-valor').dataset.fonte !== 'limite' && Math.abs(c.limite_cartao - v) > 0.004)
+    el.innerHTML = 'Limite ' + brl(c.limite_cartao) + ' − depositado ' + brl(v) + ' = <b>' + brl(c.limite_cartao - v) + '</b> a conciliar (não entra como indébito).';
+  else el.textContent = '';
 }
 
 function calcularExtraidos() {
@@ -998,7 +1084,10 @@ function calcularExtraidos() {
     const c = extraidos.contratos[+card.dataset.i];
     const vEl = card.querySelector('.c-valor');
     const P = parseBR(vEl.value), pmt = parseBR(card.querySelector('.c-pmt').value), mes = card.querySelector('.c-mes').value;
+    const dataCredito = card.querySelector('.c-data').value || null;
     const nome = 'contrato ' + (c.contrato || n + 1);
+    const ou = parseOutros(card.querySelector('.c-outros').value);
+    if (ou.bad.length) faltas.push('corrigir a linha "' + ou.bad[0] + '" dos outros créditos do ' + nome + ' (use 15/08/2024 = 300,00 ; natureza)');
     if (!(P > 0)) faltas.push('o valor do crédito do ' + nome);
     if (!(pmt > 0)) faltas.push('o desconto mensal do ' + nome);
     if (!mes) faltas.push('o mês de inclusão do ' + nome);
@@ -1010,16 +1099,20 @@ function calcularExtraidos() {
     if (hiscre && hiscre[c.modalidade] && Object.keys(hiscre[c.modalidade]).length && qtdMod[c.modalidade] > 1) hiscreAmbiguo = true;
     const excecoes = {};
     if (hv) { usouHiscre++; for (let k = ymToIdx(primeiro); k <= ymToIdx(ult); k++) if (hv[k] !== undefined) excecoes[k] = hv[k]; }
-    const inp = { ...comuns, numContrato: c.contrato || '', banco: c.banco || '', modalidade: c.modalidade, P, fonteValor: vEl.dataset.fonte, pmt, taxa: taxaDoMes(D, idx).taxa, contrato: mes, primeiro, ultimo: ult, excecoes, hiscre: !!hv };
+    const credYM = dataCredito ? dataCredito.slice(0, 7) : mes;
+    const creditos = [{ ym: credYM, data: dataCredito ? dataTxt(dataCredito) : null, valor: P, natureza: vEl.dataset.fonte === 'limite' ? 'limite do cartão (provisório)' : 'depósito em conta' }, ...ou.out];
+    const inp = { ...comuns, numContrato: c.contrato || '', banco: c.banco || '', modalidade: c.modalidade, P, fonteValor: vEl.dataset.fonte, pmt, taxa: taxaDoMes(D, idx).taxa, contrato: mes, primeiro, ultimo: ult, excecoes, hiscre: !!hv,
+      creditos, dataCredito, limite: c.limite_cartao || 0, taxaContratada: parseBR(card.querySelector('.c-tc').value) || 0, cet: parseBR(card.querySelector('.c-cet').value) || 0, teto: parseBR(card.querySelector('.c-teto').value) || 0, tetoFonte: card.querySelector('.c-tetof').value.trim() };
     items.push({ inp, r: calcular(inp, D) });
   });
+  items.sort((a, b) => ymToIdx(a.inp.contrato) - ymToIdx(b.inp.contrato));
   const nota = extraidos.ignorados ? ' <span style="color:var(--muted)">Desconsiderei ' + extraidos.ignorados + ' contrato(s) excluído(s), quitado(s) ou que não são cartão.</span>' : '';
   if (faltas.length) { upStatus('Encontrei ' + extraidos.contratos.length + ' cartão(ões) ativo(s). Falta informar ' + faltas.join(', ') + '.' + nota); return; }
   const usouLimite = items.some(({ inp }) => inp.fonteValor === 'limite');
   upStatus((items.length > 1 ? 'Calculei os ' + items.length + ' cartões ativos, cada um com sua data e taxa, e somei os resultados.' : 'Calculei o cartão ativo encontrado.') +
     (usouHiscre ? ' Usei os descontos mês a mês do HISCRE' + (usouHiscre < items.length ? ' em ' + usouHiscre + ' contrato(s)' : '') + '; nos meses fora do histórico, a parcela atual.' : '') +
     (hiscreAmbiguo ? ' Há mais de um cartão da mesma modalidade, e o HISCRE não separa por contrato: nesses usei a parcela atual.' : '') +
-    (usouLimite ? ' Como o extrato não traz o valor sacado, usei o <b>limite do cartão</b> como valor do crédito; ajuste nos campos abaixo se tiver o valor exato e toque em calcular de novo.' : '') + nota);
+    (usouLimite ? ' <b>Atenção:</b> o extrato do INSS não traz o valor depositado, por isso usei o limite do cartão só como valor provisório. Digite nos campos abaixo o valor e a data do depósito que aparecem no extrato bancário e calcule de novo.' : '') + nota);
   preencherForm(items);
   render(items);
 }
@@ -1045,7 +1138,7 @@ function preencherForm(items) {
     $('taxaHint').innerHTML = 'Taxas BACEN de cada contrato: ' + ins.map(i => '<b>' + num(i.taxa) + '%</b> (' + lbl(i.contrato) + ')').join(', ') + '. O cálculo aplica a taxa própria de cada um.';
     $('modoNota').innerHTML = '<b>Contratos selecionados (' + items.length + ')</b>' + quadro + '<div style="margin-top:6px">Os campos abaixo mostram a soma. O cálculo é feito contrato a contrato, com a data e a taxa de cada um, e os resultados são somados. Se alterar algum campo aqui, o cálculo passa a considerar só os valores digitados.</div>';
   } else {
-    $('valorHint').textContent = fonteValor === 'limite' ? 'Limite do cartão (o extrato não traz o valor sacado).' : 'Valor sacado lido do extrato.';
+    $('valorHint').textContent = fonteValor === 'limite' ? 'Provisório: limite do cartão. Informe o depósito do extrato bancário no cartão do contrato.' : 'Valor depositado informado no contrato.';
     $('modoNota').innerHTML = '<b>Contrato selecionado</b>' + quadro;
   }
   $('modoNota').style.display = 'block';
