@@ -272,7 +272,7 @@ footer b{color:var(--ink2)}
     <ol class="method" id="metodo"></ol>
   </div>
 </section>
-<footer><b>Versão 11/11/2026 · 19h00</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
+<footer><b>Versão 11/11/2026 · 19h05</b>.<br>Índices do Banco Central (SGS 25468, 433, 188 e 4390) embutidos até <span id="ultimosIdx"></span>. Confira sempre os parâmetros fixados na decisão.</footer>
 </main>
 <div class="toast" id="toast"></div>
 
@@ -1032,7 +1032,7 @@ function mostrarContratos() {
     return '<div class="ct" data-i="' + i + '"><div class="top"><label class="chk"><input type="checkbox" class="c-usar" checked> <span class="t">' + esc(c.modalidade) + ' · ' + esc(c.banco || 'banco não identificado') + '</span></label><span class="tag i">' + esc(c.situacao || 'Ativo') + '</span></div>' +
       '<div class="m">Contrato ' + esc(c.contrato || '—') + ' · incluído em ' + dataBR(c.data_inclusao) + (c.limite_cartao ? ' · limite ' + brl(c.limite_cartao) : '') + (c.valor_emprestado ? ' · valor sacado ' + brl(c.valor_emprestado) : '') + '</div>' +
       '<div class="ctgrid">' +
-      '<div><label>Valor depositado em conta (R$)</label><input class="c-valor" inputmode="decimal" value="' + (vr.v ? num(vr.v) : '') + '" data-fonte="' + vr.fonte + '"' + (vr.fonte === 'saque' ? '' : ' style="outline:2px solid #f0b429"') + '><div class="hint">' + (vr.fonte === 'saque' ? 'valor sacado do extrato do INSS' : vr.fonte === 'limite' ? '<b>provisório: limite do cartão.</b> Digite o valor do extrato bancário' : 'informe o valor do extrato bancário') + '</div></div>' +
+      '<div class="dep" style="grid-column:1/-1;background:#fff7e0;border:2px solid #f0b429;border-radius:12px;padding:10px 12px"><label style="font-weight:800;color:#7a5200">VALOR REALMENTE DEPOSITADO NA CONTA (R$)</label><input class="c-valor" inputmode="decimal" placeholder="Ex.: 2.362,58" value="' + (vr.fonte === 'saque' ? num(vr.v) : '') + '" data-fonte="' + (vr.fonte === 'saque' ? 'saque' : 'manual') + '" style="font-size:18px;font-weight:700"><div class="hint">' + (vr.fonte === 'saque' ? 'valor sacado lido do extrato do INSS: confira com o extrato bancário' : 'Veja no <b>extrato bancário</b> quanto caiu na conta. O cálculo usa este valor' + (c.limite_cartao ? ', e não o limite do cartão (' + brl(c.limite_cartao) + ')' : '') + '.') + '</div></div>' +
       '<div><label>Data do depósito</label><input class="c-data" type="date" value="' + (isoOf(c.data_inclusao) || '') + '"><div class="hint">conforme extrato bancário</div></div>' +
       '<div><label>Desconto mensal (R$)</label><input class="c-pmt" inputmode="decimal" value="' + (c.valor_parcela ? num(c.valor_parcela) : '') + '"></div>' +
       '<div><label>Mês da contratação</label><input class="c-mes" type="month" value="' + (ymOf(c.data_inclusao) || '') + '"' + (ymOf(c.data_inclusao) ? '' : ' style="outline:2px solid #f0b429"') + '><div class="hint">define a taxa BACEN</div></div>' +
@@ -1048,7 +1048,7 @@ function mostrarContratos() {
   }).join('') +
     (lista.length > 1 ? '<div class="hint">Desmarque o contrato que não deve entrar no cálculo.</div><button type="button" class="btn green" id="calcTodos">Calcular os contratos marcados</button>' : '<button type="button" class="btn green" id="calcTodos">Calcular este contrato</button>') +
     (extraidos.observacoes ? '<div class="hint">' + esc(extraidos.observacoes) + '</div>' : '');
-  $('contratos').querySelectorAll('.c-valor').forEach(el => el.addEventListener('input', () => { el.dataset.fonte = 'manual'; el.style.outline = ''; const h = el.parentNode.querySelector('.hint'); if (h) h.textContent = 'valor informado do extrato bancário'; mostrarDif(el.closest('.ct')); }));
+  $('contratos').querySelectorAll('.c-valor').forEach(el => el.addEventListener('input', () => { el.dataset.fonte = 'manual'; const box = el.closest('.dep'); if (box) { const ok = parseBR(el.value) > 0; box.style.background = ok ? '#eaf6ee' : '#fff7e0'; box.style.borderColor = ok ? '#2e8b57' : '#f0b429'; } mostrarDif(el.closest('.ct')); }));
   $('contratos').querySelectorAll('.ct').forEach(mostrarDif);
   $('calcTodos').addEventListener('click', calcularExtraidos);
   $('contratos').querySelectorAll('.c-usar').forEach(el => el.addEventListener('change', () => { el.closest('.ct').classList.toggle('off', !el.checked); calcularExtraidos(); }));
@@ -1088,7 +1088,7 @@ function calcularExtraidos() {
     const nome = 'contrato ' + (c.contrato || n + 1);
     const ou = parseOutros(card.querySelector('.c-outros').value);
     if (ou.bad.length) faltas.push('corrigir a linha "' + ou.bad[0] + '" dos outros créditos do ' + nome + ' (use 15/08/2024 = 300,00 ; natureza)');
-    if (!(P > 0)) faltas.push('o valor do crédito do ' + nome);
+    if (!(P > 0)) faltas.push('o <b>valor realmente depositado na conta</b> do ' + nome + ' (extrato bancário)');
     if (!(pmt > 0)) faltas.push('o desconto mensal do ' + nome);
     if (!mes) faltas.push('o mês de inclusão do ' + nome);
     if (!(P > 0 && pmt > 0 && mes)) return;
@@ -1107,7 +1107,7 @@ function calcularExtraidos() {
   });
   items.sort((a, b) => ymToIdx(a.inp.contrato) - ymToIdx(b.inp.contrato));
   const nota = extraidos.ignorados ? ' <span style="color:var(--muted)">Desconsiderei ' + extraidos.ignorados + ' contrato(s) excluído(s), quitado(s) ou que não são cartão.</span>' : '';
-  if (faltas.length) { upStatus('Encontrei ' + extraidos.contratos.length + ' cartão(ões) ativo(s). Falta informar ' + faltas.join(', ') + '.' + nota); return; }
+  if (faltas.length) { upStatus('Encontrei ' + extraidos.contratos.length + ' cartão(ões) ativo(s). Para calcular, falta informar ' + faltas.join(', ') + '. Depois toque em "Calcular os contratos marcados".' + nota); $('resultado').style.display = 'none'; const prim = $('contratos').querySelector('.c-valor'); if (prim && !(parseBR(prim.value) > 0)) prim.closest('.ct').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   const usouLimite = items.some(({ inp }) => inp.fonteValor === 'limite');
   upStatus((items.length > 1 ? 'Calculei os ' + items.length + ' cartões ativos, cada um com sua data e taxa, e somei os resultados.' : 'Calculei o cartão ativo encontrado.') +
     (usouHiscre ? ' Usei os descontos mês a mês do HISCRE' + (usouHiscre < items.length ? ' em ' + usouHiscre + ' contrato(s)' : '') + '; nos meses fora do histórico, a parcela atual.' : '') +
@@ -1130,11 +1130,12 @@ function preencherForm(items) {
   taxaManual = false; $('contrato').value = minYM('contrato'); $('contrato').dispatchEvent(new Event('change'));
   $('primeiro').value = minYM('primeiro'); $('ultimo').value = ins[0].ultimo;
   fonteValor = ins.every(i => i.fonteValor === 'saque') ? 'saque' : ins.some(i => i.fonteValor === 'limite') ? 'limite' : 'manual';
-  const quadro = '<table class="mini"><thead><tr><th>Contrato</th><th>Modal.</th><th>Contratação</th><th>Valor</th><th>Parcela</th></tr></thead><tbody>' +
-    ins.map(i => '<tr><td>' + esc(i.numContrato || '—') + '<small>' + esc(i.banco || '') + '</small></td><td>' + i.modalidade + '</td><td>' + lbl(i.contrato) + '</td><td>' + num(i.P) + '</td><td>' + num(i.pmt) + '</td></tr>').join('') +
-    (items.length > 1 ? '<tr class="tot"><td>Total</td><td></td><td></td><td>' + num(soma('P')) + '</td><td>' + num(soma('pmt')) + '</td></tr>' : '') + '</tbody></table>';
+  const quadro = '<table class="mini"><thead><tr><th>Contrato</th><th>Limite</th><th>Depositado</th><th>Parcela</th></tr></thead><tbody>' +
+    ins.map(i => '<tr><td>' + i.modalidade + ' ' + esc(i.numContrato || '—') + '<small>depósito ' + (i.dataCredito ? dataTxt(i.dataCredito) : lbl(i.contrato)) + '</small></td><td>' + (i.limite ? num(i.limite) : '—') + '</td><td><b>' + num(i.P) + '</b></td><td>' + num(i.pmt) + '</td></tr>').join('') +
+    (items.length > 1 ? '<tr class="tot"><td>Total</td><td>' + num(soma('limite')) + '</td><td>' + num(soma('P')) + '</td><td>' + num(soma('pmt')) + '</td></tr>' : '') + '</tbody></table>' +
+    (ins.some(i => i.limite > 0 && Math.abs(i.limite - i.P) > 0.004) ? '<div style="margin-top:6px">O cálculo usa o valor <b>depositado</b>. A diferença para o limite (' + brl(soma('limite') - soma('P')) + ') fica como ponto a conciliar, sem entrar como indébito.</div>' : '');
   if (items.length > 1) {
-    $('valorHint').textContent = 'Soma dos ' + items.length + ' contratos (' + ins.map(i => brl(i.P)).join(' + ') + ').' + (fonteValor === 'limite' ? ' Limite do cartão, pois o extrato não traz o valor sacado.' : '');
+    $('valorHint').textContent = 'Soma dos valores depositados (' + ins.map(i => brl(i.P)).join(' + ') + ').';
     $('taxaHint').innerHTML = 'Taxas BACEN de cada contrato: ' + ins.map(i => '<b>' + num(i.taxa) + '%</b> (' + lbl(i.contrato) + ')').join(', ') + '. O cálculo aplica a taxa própria de cada um.';
     $('modoNota').innerHTML = '<b>Contratos selecionados (' + items.length + ')</b>' + quadro + '<div style="margin-top:6px">Os campos abaixo mostram a soma. O cálculo é feito contrato a contrato, com a data e a taxa de cada um, e os resultados são somados. Se alterar algum campo aqui, o cálculo passa a considerar só os valores digitados.</div>';
   } else {
